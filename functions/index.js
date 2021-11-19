@@ -75,6 +75,7 @@ export const sendPushNotification = functions.https.onRequest(async (req, res) =
       }
     })().then(
       res
+        .status(200)
         .json({
           result: `Sent notification to ${numDevices} devices in ${chunks.length} chunks$`,
           tickets,
