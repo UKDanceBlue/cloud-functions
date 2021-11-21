@@ -3,22 +3,35 @@ import * as functions from "firebase-functions";
 // The Firebase Admin SDK to access Firestore.
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 
 import { Expo } from "expo-server-sdk";
 
 initializeApp();
 
-export const sendPushNotification = functions.https.onRequest(async (req, res) => {
-  const { title, body, data, ttl } = req.body;
+export const sendPushNotification = functions.https.onCall(async (data, context) => {
+  const { notificationTitle, notificationBody, notificationData, notificationTtl } = data;
+  const { email } = context.auth.token;
 
-  let numDevices = 0;
+  const notificationsConfig = await getFirestore().doc("configs/notifications").get();
+  const emails = notificationsConfig.get("allowedEmails");
+  if (!emails.includes(email)) {
+    return {
+      status: "error",
+      error: {
+        code: "email-not-authorized",
+        message: "Your account is not authorized to send push notifications. No action was taken.",
+      },
+    };
+  }
+
   const tokens = [];
 
-  const dbRef = getFirestore().collection("expo-push-tokens");
-  await dbRef.get().then((snapshot) => {
+  const pushTokensDbRef = getFirestore().collection("expo-push-tokens");
+  // RETURN VALUE
+  return await pushTokensDbRef.get().then((snapshot) => {
     snapshot.forEach((doc) => {
       tokens.push(doc.data().token);
-      numDevices++;
     });
 
     // Create a new Expo SDK client
@@ -39,10 +52,10 @@ export const sendPushNotification = functions.https.onRequest(async (req, res) =
         messages.push({
           to: pushToken,
           sound: "default",
-          title,
-          body,
-          data,
-          ttl,
+          title: notificationTitle || "DanceBlue",
+          body: notificationBody || "",
+          data: notificationData || {},
+          ttl: notificationTtl || undefined,
         });
       }
     }
@@ -54,7 +67,8 @@ export const sendPushNotification = functions.https.onRequest(async (req, res) =
     // compressed).
     const chunks = expo.chunkPushNotifications(messages);
     const tickets = [];
-    (async () => {
+    // RETURN VALUE
+    return (async () => {
       // Send the chunks to the Expo push notification service. There are
       // different strategies you could use. A simple one is to send one chunk at a
       // time, which nicely spreads the load out over time:
@@ -71,14 +85,21 @@ export const sendPushNotification = functions.https.onRequest(async (req, res) =
           // https://docs.expo.io/push-notifications/sending-notifications/#individual-errors
         } catch (error) {
           functions.logger.error("Error when sending a notification chunck:", error);
+          // RETURN VALUE on exception
+          return {
+            status: "error",
+            error,
+          };
         }
       }
-    })().then(
-      res
-        .status(200)
-        .json({
-          result: `Sent notification to ${numDevices} devices in ${chunks.length} chunks$`,
+      // RETURN VALUE if no exception
+      return {
+        status: "OK",
           tickets,
+      };
+    })();
+  });
+});
         })
         .end()
     );
