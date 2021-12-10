@@ -236,3 +236,130 @@ export const syncDBFunds = functions.pubsub.schedule("0 0 5 31 2 ?").onRun(async
     }
   });
 });
+
+export const importSpiritPoints = functions.https.onRequest(async (req, res) => {
+  /*
+   * 'points' should be in the following form:
+   * {
+   *   "A Team": [
+   *     {
+   *       "rdig538": 6,
+   *       "ghbd763": 15
+   *     },
+   *     21
+   *   ],
+   *   "Another Team": [
+   *     {
+   *       "yfyu384": 45,
+   *       "dfuo242": 14
+   *     },
+   *     59
+   *   ]
+   * }
+   */
+  try {
+    // Make sure a token was sent
+    if (!req.get("X-AuthToken")) {
+      res.sendStatus(401);
+    }
+    // Make sure it's the right token
+    else if (
+      req.get("X-AuthToken") !==
+      (await getFirestore().collection("configs").doc("db-spirit-spreadsheet-sync").get()).get(
+        "AuthToken"
+      )
+    ) {
+      res.sendStatus(403);
+    }
+
+    // Convenience
+    const points = req.body;
+    const teamsCollection = getFirestore().collection("teams");
+
+    // Get a reference to the teams collection and get an array of all the teams
+    const firebaseTeams = (await teamsCollection.get()).docs.map((document) => {
+      const data = document.data();
+      return { firebaseId: document.id, spiritSpreadsheetId: data.spiritSpreadsheetId };
+    });
+
+    const responseData = {};
+    for (const team of firebaseTeams) {
+      // Only try to load data if there is data to load
+      if (points[team.spiritSpreadsheetId]) {
+        // Check types
+        if (
+          typeof points[team.spiritSpreadsheetId][0] !== "object" ||
+          typeof points[team.spiritSpreadsheetId][1] !== "number"
+        ) {
+          responseData[team.spiritSpreadsheetId] = {
+            firebaseId: team.firebaseId,
+            success: false,
+            reason: "Invalid data;nrequest aborted",
+          };
+          functions.logger.error(
+            `Invalid data attempted to sync to firebase team ${team.firebaseId}. No changes were made and the request was aborted.`
+          );
+          res.status(400).send(responseData).end();
+          continue;
+        }
+        await teamsCollection
+          // Start off in the confidential subcollection that is under the team's main collection
+          .doc(team.firebaseId)
+          .collection("confidential")
+          .doc("individualSpiritPoints")
+          // Set the individual points to the raw data that was passed from the spreadsheet; this will probably be an issue but we'll see
+          // This will also wipe out the document's previous value
+          .set(points[team.spiritSpreadsheetId][0])
+          // After that is done we move onto the total
+          .then(() =>
+            teamsCollection
+              .doc(team.firebaseId)
+              // Merge the total points into the team's regular, nonconfidential, collection
+              .set({ totalSpiritPoints: points[team.spiritSpreadsheetId][1] }, { merge: true })
+              .then(
+                // After we are done with both of those, add a message to the resonse indicating success
+                () =>
+                  (responseData[team.spiritSpreadsheetId] = {
+                    firebaseId: team.firebaseId,
+                    success: true,
+                  })
+              )
+              .catch((reason) => {
+                // Some kind of error, indicate it in the response and log a message
+                responseData[team.spiritSpreadsheetId] = {
+                  firebaseId: team.firebaseId,
+                  success: false,
+                  cause: reason,
+                };
+                functions.logger.error(
+                  `Error when loading data to firebase team ${team.firebaseId}, data may be corrupt. Error: `,
+                  reason
+                );
+              })
+          )
+          .catch((reason) => {
+            // Some kind of error, indicate it in the response and log a message
+            responseData[team.spiritSpreadsheetId] = {
+              firebaseId: team.firebaseId,
+              success: false,
+              cause: reason,
+            };
+            functions.logger.error(
+              `Error when loading data to firebase team ${team.firebaseId}, data may be corrupt. Error: `,
+              reason
+            );
+          });
+      } else {
+        // The team is in firebase, but not the spreadsheet
+        functions.logger.info(
+          `The firebase team ${team.firebaseId} was not included in the sync data, consider deleting it or adding it to the spreadsheet.`
+        );
+      }
+    }
+    // Finish up
+    res.status(200).send(responseData).end();
+  } catch (err) {
+    // Something, somewhere, threw an error
+    res.status(500).send(err).end();
+  }
+});
