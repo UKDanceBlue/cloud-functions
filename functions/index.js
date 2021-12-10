@@ -186,13 +186,15 @@ export const syncDBFunds = functions.pubsub.schedule("0 0 5 31 2 ?").onRun(async
       if (Array.isArray(json)) {
         for (let i = 0; i < json.length; i++) {
           // Ensure that each element of the array has a team name and is active
-          if (json[i].Team && json[i].Active) {
-            if (teamTotals[json[i].Team]) {
-              // If the team had a total stored in the last fiscal year, just add to it
-              teamTotals[json[i].Team] = teamTotals[json[i].Team] + json[i].Total;
-            } else {
-              // Otherwise create a spot for them
-              teamTotals[json[i].Team] = json[i].Total;
+          if (json[i].DbNum !== null && json[i].DbNum !== undefined) {
+            if (json[i].Active) {
+              if (teamTotals[json[i].DbNum]) {
+                // If the team had a total stored in the last fiscal year, just add to it
+                teamTotals[json[i].DbNum] = teamTotals[json[i].DbNum] + json[i].Total;
+              } else {
+                // Otherwise create a spot for them
+                teamTotals[json[i].DbNum] = json[i].Total;
+              }
             }
           } else {
             functions.logger.info(
@@ -214,27 +216,40 @@ export const syncDBFunds = functions.pubsub.schedule("0 0 5 31 2 ?").onRun(async
     }
   }
 
+  console.log(teamTotals);
+
+  const teamsCollection = getFirestore().collection("teams");
+
   // Get a reference to the teams collection and get an array of all the teams
-  const firebaseTeams = (await getFirestore().collection("teams").get()).docs;
-  // Iterate through the array
-  firebaseTeams.forEach(async (queryDocumentSnapshot) => {
-    // Get team name as stored in the firebase docuement
-    const teamName = queryDocumentSnapshot.get("name");
-    // If the teamToals object has an element with the name of the team loaded from firebase then upload their total to firebase
-    if (teamTotals[teamName]) {
-      queryDocumentSnapshot.ref
-        // Merge the total into the team's document
-        .set({ fundraisingTotal: teamTotals[teamName] }, { merge: true })
-        .then(
-          (result) =>
-            functions.logger.info(
-              `Set *fundraisingTotal* of ${teamName} to ${teamTotals[teamName]}.`
-            ),
-          (reason) =>
-            functions.logger.error(`Failed to set *fundraisingTotal* of ${teamName}.`, reason)
-        );
-    }
+  const firebaseTeams = (await teamsCollection.get()).docs.map((document) => {
+    const data = document.data();
+    return { firebaseId: document.id, networkForGoodId: data.networkForGoodId };
   });
+
+  for (const team of firebaseTeams) {
+    // Only try to load data if there is data to load
+    if (teamTotals[team.networkForGoodId]) {
+      await teamsCollection
+        // Enter the confidential subcollection that is under the team's main collection
+        .doc(team.firebaseId)
+        .collection("confidential")
+        .doc("fundraising")
+        // Set the individual points to the raw data that was passed from the spreadsheet; this will probably be an issue but we'll see
+        // This will also wipe out the document's previous value
+        .set({ total: teamTotals[team.networkForGoodId] })
+        .catch((reason) => {
+          functions.logger.error(
+            `Error when loading data to firebase team ${team.firebaseId}, data may be corrupt. Error: `,
+            reason
+          );
+        });
+    } else {
+      // The team is in firebase, but not the spreadsheet
+      functions.logger.info(
+        `The firebase team ${team.firebaseId} was not included in the sync data, consider deleting it.`
+      );
+    }
+  }
 });
 
 export const importSpiritPoints = functions.https.onRequest(async (req, res) => {
