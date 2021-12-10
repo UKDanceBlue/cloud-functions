@@ -31,7 +31,7 @@ export const sendPushNotification = functions.https.onCall(async (data, context)
 
   const pushTokensDbRef = getFirestore().collection("expo-push-tokens");
   // RETURN VALUE
-  return await pushTokensDbRef.get().then((snapshot) => {
+  return await pushTokensDbRef.get().then(async (snapshot) => {
     snapshot.forEach((doc) => {
       tokens.push(doc.data().token);
     });
@@ -103,7 +103,7 @@ export const sendPushNotification = functions.https.onCall(async (data, context)
   });
 });
 
-export const sweepOldAccounts = functions.https.onRequest((req, res) => {
+export const sweepOldAccounts = functions.https.onRequest(async (req, res) => {
   const response = { status: undefined, usersDeleted: [], errors: [] };
 
   const annonCutoffDate = new Date();
@@ -112,9 +112,9 @@ export const sweepOldAccounts = functions.https.onRequest((req, res) => {
   const linkBlueCutoffDate = new Date();
   linkBlueCutoffDate.setDate(linkBlueCutoffDate.getDate() - 370);
 
-  const listAllUsers = (nextPageToken) => {
+  const listAllUsers = async (nextPageToken) => {
     // List batch of users, 1000 at a time.
-    getAuth()
+    await getAuth()
       .listUsers(1000, nextPageToken)
       .then((listUsersResult) => {
         listUsersResult.users.forEach((userRecord) => {
@@ -141,7 +141,7 @@ export const sweepOldAccounts = functions.https.onRequest((req, res) => {
       });
   };
   // Start recusively listing users from the beginning, 1000 at a time.
-  listAllUsers();
+  await listAllUsers();
 
   if (!(response.status === "ERROR")) {
     response.status = "OK";
