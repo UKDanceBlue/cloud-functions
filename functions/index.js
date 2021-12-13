@@ -9,19 +9,19 @@ import { Expo } from "expo-server-sdk";
 
 import fetch from "node-fetch";
 
-initializeApp();
+initializeApp({ projectId: "react-danceblue" });
 
 export const sendPushNotification = functions.https.onCall(async (data, context) => {
   const { notificationTitle, notificationBody, notificationData, notificationTtl } = data;
-  const { email } = context.auth.token;
+  const email = context.auth?.token?.email;
 
-  const notificationsConfig = await getFirestore().doc("configs/notifications").get().data;
+  const notificationsConfig = (await getFirestore().doc("configs/notifications").get()).data();
   const emails = notificationsConfig.allowedEmails;
   if (!emails.includes(email)) {
     return {
       status: "error",
       error: {
-        code: "email-not-authorized",
+        code: "not-authorized",
         message: "Your account is not authorized to send push notifications. No action was taken.",
       },
     };
@@ -374,6 +374,7 @@ export const importSpiritPoints = functions.https.onRequest(async (req, res) => 
     // Finish up
     res.status(200).send(responseData).end();
   } catch (err) {
+    functions.logger.error("An error occurred and the function was aborted", err);
     // Something, somewhere, threw an error
     res.status(500).send(err).end();
   }
