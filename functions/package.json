@@ -10,9 +10,10 @@
     "logs": "firebase functions:log"
   },
   "engines": {
-    "node": "16"
+    "node": "14"
   },
   "main": "index.js",
+  "type": "module",
   "dependencies": {
     "expo-server-sdk": "^3.6.0",
     "firebase-admin": "^10.0.0",
@@ -26,6 +27,5 @@
     "eslint-plugin-import": "^2.22.1",
     "prettier": "^2.4.1"
   },
-  "private": true,
-  "type": "module"
+  "private": true
 }
