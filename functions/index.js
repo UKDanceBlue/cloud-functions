@@ -29,16 +29,16 @@ export const sendPushNotification = functions.https.onCall(async (data, context)
 
   const tokens = [];
 
-  const pushTokensDbRef = getFirestore().collection("expo-push-tokens");
+  const pushTokensDbRef = getFirestore().collection("devices");
   // RETURN VALUE
   return await pushTokensDbRef.get().then(async (snapshot) => {
     snapshot.forEach((doc) => {
-      tokens.push(doc.data().token);
+      tokens.push(doc.data().expoPushToken);
     });
 
     // Create a new Expo SDK client
     // optionally providing an access token if you have enabled push security
-    const expo = new Expo(); // { accessToken: process.env.EXPO_ACCESS_TOKEN }
+    const expo = new Expo({ accessToken: notificationsConfig.expoAccessToken });
 
     // Create the messages that you want to send to clients
     const messages = [];
