@@ -12,7 +12,13 @@ import fetch from "node-fetch";
 initializeApp({ projectId: "react-danceblue" });
 
 export const sendPushNotification = functions.https.onCall(async (data, context) => {
-  const { notificationTitle, notificationBody, notificationData, notificationTtl } = data;
+  const {
+    notificationTitle,
+    notificationBody,
+    notificationAudiences,
+    notificationData,
+    notificationTtl,
+  } = data;
   const email = context.auth?.token?.email;
 
   const notificationsConfig = (await getFirestore().doc("configs/notifications").get()).data();
@@ -29,9 +35,28 @@ export const sendPushNotification = functions.https.onCall(async (data, context)
 
   const tokens = [];
 
-  const pushTokensDbRef = getFirestore().collection("devices");
+  let pushTokensQuery;
+  if (Array.isArray(notificationAudiences) && !(notificationAudiences.length === 0)) {
+    if (notificationAudiences.length > 10) {
+      return {
+        status: "error",
+        error: {
+          code: "too-many-audiences",
+          message:
+            "Due to technical limitations, you may only speicify a maximium of 10 audiences.",
+        },
+      };
+    }
+    pushTokensQuery = getFirestore()
+      .collection("devices")
+      .where("audience", "in", notificationAudiences);
+  } else {
+    pushTokensQuery = getFirestore()
+      .collection("devices")
+      .where("audiences", "array-contains-any", ["all"]);
+  }
   // RETURN VALUE
-  return await pushTokensDbRef.get().then(async (snapshot) => {
+  return await pushTokensQuery.get().then(async (snapshot) => {
     snapshot.forEach((doc) => {
       tokens.push(doc.data().expoPushToken);
     });
@@ -74,7 +99,6 @@ export const sendPushNotification = functions.https.onCall(async (data, context)
       // Send the chunks to the Expo push notification service. There are
       // different strategies you could use. A simple one is to send one chunk at a
       // time, which nicely spreads the load out over time:
-      // eslint-disable-next-line no-restricted-syntax
       for (const chunk of chunks) {
         try {
           // eslint-disable-next-line no-await-in-loop
