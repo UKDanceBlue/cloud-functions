@@ -2,7 +2,7 @@
 import * as functions from "firebase-functions";
 // The Firebase Admin SDK to access Firestore.
 import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 
 import { Expo } from "expo-server-sdk";
@@ -12,13 +12,7 @@ import fetch from "node-fetch";
 initializeApp({ projectId: "react-danceblue" });
 
 export const sendPushNotification = functions.https.onCall(async (data, context) => {
-  const {
-    notificationTitle,
-    notificationBody,
-    notificationAudiences,
-    notificationData,
-    notificationTtl,
-  } = data;
+  const { notificationTitle, notificationBody, notificationAudiences, notificationData } = data;
   const email = context.auth?.token?.email;
 
   const notificationsConfig = (await getFirestore().doc("configs/notifications").get()).data();
@@ -55,10 +49,22 @@ export const sendPushNotification = functions.https.onCall(async (data, context)
       .collection("devices")
       .where("audiences", "array-contains-any", ["all"]);
   }
+
+  const notification = {
+    sound: "default",
+    title: notificationTitle || "DanceBlue",
+    body: notificationBody || "",
+    data: notificationData || {},
+  };
+
   // RETURN VALUE
   return await pushTokensQuery.get().then(async (snapshot) => {
     snapshot.forEach((doc) => {
-      tokens.push(doc.data().expoPushToken);
+      const docData = doc.data();
+      tokens.push(docData.expoPushToken);
+      doc.ref.update({
+        pastNotifications: FieldValue.arrayUnion(notification),
+      });
     });
 
     // Create a new Expo SDK client
@@ -76,14 +82,7 @@ export const sendPushNotification = functions.https.onCall(async (data, context)
         functions.logger.error(`Push token ${pushToken} is not a valid Expo push token`);
       } else {
         // Construct a message (see https://docs.expo.io/push-notifications/sending-notifications/)
-        messages.push({
-          to: pushToken,
-          sound: "default",
-          title: notificationTitle || "DanceBlue",
-          body: notificationBody || "",
-          data: notificationData || {},
-          ttl: notificationTtl || undefined,
-        });
+        messages.push({ to: pushToken, ...notification });
       }
     }
 
@@ -118,7 +117,13 @@ export const sendPushNotification = functions.https.onCall(async (data, context)
           };
         }
       }
-      // RETURN VALUE if no exception
+      // If no exception:
+      for (const ticket of tickets) {
+        await getFirestore()
+          .doc(`past-notifications/${ticket.id}`)
+          .set({ title: notification.title, body: notification.body, data: notification.data });
+      }
+      // RETURN VALUE
       return {
         status: "OK",
         tickets,
