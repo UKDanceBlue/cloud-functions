@@ -56,15 +56,14 @@ export const sendPushNotification = functions.https.onCall(async (data, context)
     body: notificationBody || "",
     data: notificationData || {},
   };
+  const devicesToRecieveNotification = {};
 
   // RETURN VALUE
   return await pushTokensQuery.get().then(async (snapshot) => {
     snapshot.forEach((doc) => {
       const docData = doc.data();
       tokens.push(docData.expoPushToken);
-      doc.ref.update({
-        pastNotifications: FieldValue.arrayUnion(notification),
-      });
+      devicesToRecieveNotification[docData.expoPushToken] = doc.ref;
     });
 
     // Create a new Expo SDK client
@@ -110,6 +109,9 @@ export const sendPushNotification = functions.https.onCall(async (data, context)
           // https://docs.expo.io/push-notifications/sending-notifications/#individual-errors
         } catch (error) {
           functions.logger.error("Error when sending a notification chunck:", error);
+          for (let i = 0; i < chunk.length; i++) {
+            delete devicesToRecieveNotification[chunk[i]];
+          }
           // RETURN VALUE on exception
           return {
             status: "error",
@@ -118,11 +120,25 @@ export const sendPushNotification = functions.https.onCall(async (data, context)
         }
       }
       // If no exception:
-      for (const ticket of tickets) {
-        await getFirestore()
-          .doc(`past-notifications/${ticket.id}`)
-          .set({ title: notification.title, body: notification.body, data: notification.data });
-      }
+      const pastNotificationsCollection = getFirestore().collection("past-notifications");
+      await pastNotificationsCollection
+        .add({
+          title: notification.title,
+          body: notification.body,
+          data: notification.data,
+          sound: notification.sound,
+          sendTime: FieldValue.serverTimestamp(),
+        })
+        .then(async (notificationDocumentRef) => {
+          for (const device in devicesToRecieveNotification) {
+            if (Object.prototype.hasOwnProperty.call(devicesToRecieveNotification, device)) {
+              await devicesToRecieveNotification[device].update({
+                pastNotifications: FieldValue.arrayUnion(notificationDocumentRef),
+              });
+            }
+          }
+        });
+
       // RETURN VALUE
       return {
         status: "OK",
