@@ -48,7 +48,7 @@ export default async (data, context) => {
     body: notificationBody || "",
     data: notificationData || {},
   };
-  const devicesToRecieveNotification = {};
+  const usersToRecieveNotification = {};
 
   // RETURN VALUE
   return await pushTokensQuery.get().then(async (snapshot) => {
@@ -56,7 +56,7 @@ export default async (data, context) => {
       const docData = doc.data();
       if (docData.expoPushToken) {
         tokens.push(docData.expoPushToken);
-        devicesToRecieveNotification[docData.expoPushToken] = doc.ref;
+        usersToRecieveNotification[docData.expoPushToken] = docData.latestUser;
       }
     });
 
@@ -104,7 +104,7 @@ export default async (data, context) => {
         } catch (error) {
           functions.logger.error("Error when sending a notification chunck:", error);
           for (let i = 0; i < chunk.length; i++) {
-            delete devicesToRecieveNotification[chunk[i]];
+            delete usersToRecieveNotification[chunk[i]];
           }
           // RETURN VALUE on exception
           return {
@@ -124,13 +124,19 @@ export default async (data, context) => {
           sendTime: FieldValue.serverTimestamp(),
         })
         .then(async (notificationDocumentRef) => {
-          for (const device in devicesToRecieveNotification) {
-            if (Object.prototype.hasOwnProperty.call(devicesToRecieveNotification, device)) {
-              await devicesToRecieveNotification[device].update({
+          // Add past notifications to each user's profile
+          const users = Object.values(usersToRecieveNotification);
+
+          const userPastNotificationPromises = [];
+          for (let i = 0; i < users.length; i++) {
+            userPastNotificationPromises.push(
+              usersToRecieveNotification[users[i]].update({
                 pastNotifications: FieldValue.arrayUnion(notificationDocumentRef),
-              });
-            }
+              })
+            );
           }
+
+          Promise.allSettled(userPastNotificationPromises);
         });
 
       // RETURN VALUE
