@@ -4,10 +4,23 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { Expo } from "expo-server-sdk";
 
 export default async (data, context) => {
-  const { notificationTitle, notificationBody, notificationAudiences, notificationData } = data;
+  const {
+    notificationTitle,
+    notificationBody,
+    notificationAudiences,
+    notificationData,
+    matchAllAudiences,
+  } = data;
   const email = context.auth?.token?.email;
 
   const notificationsConfig = (await getFirestore().doc("configs/notifications").get()).data();
+
+  const devMode = !!notificationsConfig.devMode;
+  if (devMode) {
+    functions.logger.debug(JSON.stringify(data, undefined, 2));
+    functions.logger.debug(JSON.stringify(notificationsConfig, undefined, 2));
+  }
+
   const emails = notificationsConfig.allowedEmails;
   if (!emails.includes(email)) {
     return {
@@ -22,7 +35,7 @@ export default async (data, context) => {
   const tokens = [];
 
   let pushTokensQuery;
-  if (Array.isArray(notificationAudiences) && !(notificationAudiences.length === 0)) {
+  if (Array.isArray(notificationAudiences) && notificationAudiences.length > 0) {
     if (notificationAudiences.length > 10) {
       return {
         status: "error",
@@ -33,13 +46,30 @@ export default async (data, context) => {
         },
       };
     }
-    pushTokensQuery = getFirestore()
-      .collection("devices")
-      .where("audience", "in", notificationAudiences);
+    // Do the designated devices need to match all of the given audiences, or just some of them?
+    if (matchAllAudiences) {
+      if (devMode) {
+        functions.logger.debug(
+          `Trying to match all audiences, grabbing only those with ${notificationAudiences[0]}`
+        );
+      }
+      pushTokensQuery = getFirestore()
+        .collection("devices")
+        /** TODO fix this, not possible until firestore has array-contains-all
+         * Until that time I am just going to fetch all of
+         * the devices that match the first audience (hopefully
+         * the smallest) and then filter it later (see 'TERRIBLENESS HERE')
+         */
+        .where("audiences", "array-contains", notificationAudiences[0]);
+    } else {
+      pushTokensQuery = getFirestore()
+        .collection("devices")
+        .where("audiences", "array-contains-any", notificationAudiences);
+    }
   } else {
     pushTokensQuery = getFirestore()
       .collection("devices")
-      .where("audiences", "array-contains-any", ["all"]);
+      .where("audiences", "array-contains", "all");
   }
 
   const notification = {
@@ -55,8 +85,51 @@ export default async (data, context) => {
     snapshot.forEach((doc) => {
       const docData = doc.data();
       if (docData.expoPushToken) {
+        if (devMode) {
+          functions.logger.debug(`device ${doc.id} is being checked`);
+        }
+        // TERRIBLENESS HERE
+        if (matchAllAudiences) {
+          let isDeviceInAllAudiences = true;
+          // Iterate though every audience the device needs (except the first, which we already checked up above)
+          for (let i = 1; i < notificationAudiences.length; i++) {
+            let isDeviceInAudience = false;
+            // Iterate though every audience the device has
+            for (let j = 0; j < docData.audiences.length; j++) {
+              // If the device has this audience, mark it as such and bail out
+              if (notificationAudiences[i] === docData.audiences[j]) {
+                if (devMode) {
+                  functions.logger.debug(
+                    `device ${doc.id} has attribute '${notificationAudiences[i]}'`
+                  );
+                }
+                isDeviceInAudience = true;
+                break;
+              }
+            }
+            // If the device does not have a needed audience, mark it as such and bail out
+            if (!isDeviceInAudience) {
+              if (devMode) {
+                functions.logger.debug(
+                  `device ${doc.id} was disqualified because it does not have attribute '${notificationAudiences[i]}'`
+                );
+              }
+              isDeviceInAllAudiences = false;
+              break;
+            }
+          }
+          if (!isDeviceInAllAudiences) {
+            // Don't add this device to the tokens array
+            return;
+          }
+        }
+        if (devMode) {
+          functions.logger.debug(`device ${doc.id} will be sent a notification`);
+        }
         tokens.push(docData.expoPushToken);
-        usersToRecieveNotification[docData.expoPushToken] = docData.latestUser;
+        usersToRecieveNotification[docData.expoPushToken] = getFirestore().doc(
+          `users/${docData.latestUser}`
+        );
       }
     });
 
@@ -85,6 +158,11 @@ export default async (data, context) => {
     // and to compress them (notifications with similar content will get
     // compressed).
     const chunks = expo.chunkPushNotifications(messages);
+    if (devMode) {
+      functions.logger.debug(
+        `About to try to send chunks: ${JSON.stringify(chunks, undefined, 2)}`
+      );
+    }
     const tickets = [];
     // RETURN VALUE
     return (async () => {
@@ -95,7 +173,7 @@ export default async (data, context) => {
         try {
           // eslint-disable-next-line no-await-in-loop
           const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-          functions.logger.info("Sending notification chunck:", ticketChunk);
+          functions.logger.info("Sent notification chunck:", ticketChunk);
           tickets.push(...ticketChunk);
           // NOTE: If a ticket contains an error code in ticket.details.error, you
           // must handle it appropriately. The error codes are listed in the Expo
@@ -113,6 +191,11 @@ export default async (data, context) => {
           };
         }
       }
+      if (devMode) {
+        functions.logger.debug(
+          "It seems like sending notifications with Expo went well, adding to past-notifications"
+        );
+      }
       // If no exception:
       const pastNotificationsCollection = getFirestore().collection("past-notifications");
       await pastNotificationsCollection
@@ -124,8 +207,13 @@ export default async (data, context) => {
           sendTime: FieldValue.serverTimestamp(),
         })
         .then(async (notificationDocumentRef) => {
+          if (devMode) {
+            functions.logger.debug(
+              `Added a record of the notification to ${notificationDocumentRef.path}`
+            );
+          }
           // Add past notifications to each user's profile
-          const users = Object.values(usersToRecieveNotification);
+          const users = Object.keys(usersToRecieveNotification);
 
           const userPastNotificationPromises = [];
           for (let i = 0; i < users.length; i++) {
@@ -136,7 +224,12 @@ export default async (data, context) => {
             );
           }
 
-          Promise.allSettled(userPastNotificationPromises);
+          await Promise.allSettled(userPastNotificationPromises);
+          if (devMode) {
+            functions.logger.debug(
+              "Added a reference to the past-notifications record to all users who should have recieved it"
+            );
+          }
         });
 
       // RETURN VALUE
