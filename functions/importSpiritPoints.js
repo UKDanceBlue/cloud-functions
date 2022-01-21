@@ -18,8 +18,16 @@ export default async (req, res) => {
    *       "dfon242": {name: "Dan Fondue", value: 14}
    *     },
    *     59
+   *   ],
+   *   "Another Team": [
+   *     {
+   *       "1": {name: "Yuri Fyuido", value: 45},
+   *       "67": {name: "Dan Fondue", value: 14}
+   *     },
+   *     59
    *   ]
    * }
+   * The numeric indexes indicate a missing linkblue, this should be handled by guessing the linkblue based on the user's name
    */
   const responseData = {};
   try {
@@ -75,16 +83,42 @@ export default async (req, res) => {
         const points = {};
         const names = {};
 
-        for (const linkblue in sheetData[team.spiritSpreadsheetId][0]) {
-          if (
-            Object.prototype.hasOwnProperty.call(sheetData[team.spiritSpreadsheetId][0], linkblue)
-          ) {
-            points[linkblue] = sheetData[team.spiritSpreadsheetId][0][linkblue]?.value;
-            names[linkblue] = sheetData[team.spiritSpreadsheetId][0][linkblue]?.name;
+        for (let i = 0; i < Object.entries(sheetData[team.spiritSpreadsheetId][0]).length; i++) {
+          const entry = Object.entries(sheetData[team.spiritSpreadsheetId][0])[i];
+          const id = entry[0];
+          const dancerPoints = entry[1]?.value;
+          const dancerName = entry[1]?.name;
+
+          // Make sure we got a name and point value for this dancer
+          if (dancerPoints && dancerName) {
+            let linkblue = id;
+
+            // If we got a numeric index rather than a linkblue, fallback to a name lookup
+            if (!isNaN(parseInt(linkblue.indexOf(0)))) {
+              // Search for the name we got from Google Sheets in the users collection
+              const linkblueLookupQuery = getFirestore()
+                .collection("users")
+                .where("firstName", "==", dancerName.substring(0, dancerName.indexOf(" ")))
+                .where("lastName", "==", dancerName.substring(dancerName.indexOf(" ")));
+              const snapshot = (await linkblueLookupQuery.get()).docs[0];
+              if (snapshot) {
+                // If we got something then store it and throw it back into the normal flow
+                linkblue = snapshot.get("linkblue");
+              } else {
+                linkblue = null;
+              }
+            }
+
+            // Make sure we got a linkblue, if not ignore this row
+            if (linkblue) {
+              points[linkblue] = dancerPoints;
+              names[linkblue] = dancerName;
+            } else {
+              continue;
+            }
           } else {
             functions.logger.warn(
-              `Error when loading data to firebase team ${team.firebaseId}, data may be corrupt. Error found at: `,
-              sheetData[linkblue][0]
+              `Error when loading data to firebase team ${team.firebaseId}, data may be corrupt. Error found at: ${entry}`
             );
           }
         }
@@ -105,42 +139,41 @@ export default async (req, res) => {
           return;
         }
 
+        // Start off in the confidential subcollection that is under the team's main collection
         await teamsCollection
-          // Start off in the confidential subcollection that is under the team's main collection
           .doc(team.firebaseId)
           .collection("confidential")
           .doc("individualSpiritPoints")
           // Set the individual points to the raw data that was passed from the spreadsheet; this will probably be an issue but we'll see
           // This will also wipe out the document's previous value
           .set(points)
-          // After that is done we move onto the total
-          .then(() =>
-            teamsCollection
-              .doc(team.firebaseId)
-              // Merge the total points into the team's regular, nonconfidential, collection
-              .set(
-                { totalSpiritPoints: sheetData[team.spiritSpreadsheetId][1] },
-                { mergeFields: ["totalSpiritPoints"] }
-              )
-              .then(
-                // After we are done with both of those, add a message to the resonse indicating success
-                () =>
-                  (responseData[team.spiritSpreadsheetId] = {
-                    firebaseId: team.firebaseId,
-                    success: true,
-                  })
-              )
-              .catch((reason) => {
-                // Some kind of error, indicate it in the response and log a message
-                responseData[team.spiritSpreadsheetId] = {
-                  firebaseId: team.firebaseId,
-                  success: false,
-                  cause: reason,
-                };
-                functions.logger.error(
-                  `Error when loading points to firebase team ${team.firebaseId}, data may be corrupt. Error: `,
-                  reason
-                );
+          .catch((reason) => {
+            // Some kind of error, indicate it in the response and log a message
+            responseData[team.spiritSpreadsheetId] = {
+              firebaseId: team.firebaseId,
+              success: false,
+              cause: reason,
+            };
+            functions.logger.error(
+              `Error when loading points to firebase team ${team.firebaseId}, data may be corrupt. Error: `,
+              reason
+            );
+          });
+
+        // After that is done we move onto the total
+        await teamsCollection
+          .doc(team.firebaseId)
+          // Merge the total points into the team's regular, nonconfidential, collection
+          .set(
+            { totalSpiritPoints: sheetData[team.spiritSpreadsheetId][1] },
+            { mergeFields: ["totalSpiritPoints"] }
+          )
+          .then(
+            // After we are done with both of those, add a message to the resonse indicating success
+            () =>
+              (responseData[team.spiritSpreadsheetId] = {
+                firebaseId: team.firebaseId,
+                success: true,
               })
           )
           .catch((reason) => {
