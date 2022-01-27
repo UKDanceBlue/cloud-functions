@@ -94,7 +94,7 @@ export default async (req, res) => {
             let linkblue = id;
 
             // If we got a numeric index rather than a linkblue, fallback to a name lookup
-            if (!isNaN(parseInt(linkblue.indexOf(0)))) {
+            if (!isNaN(parseInt(linkblue[0]))) {
               // Search for the name we got from Google Sheets in the users collection
               const linkblueLookupQuery = getFirestore()
                 .collection("users")
