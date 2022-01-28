@@ -208,19 +208,27 @@ export default async (data, context) => {
   // to retrieve batches of receipts from the Expo service.
   for (let i = 0; i < receiptIdChunks.length; i++) {
     try {
-      const receipts = await expo.getPushNotificationReceiptsAsync(receiptIdChunks[i]);
+      const receipts = Object.entries(
+        await expo.getPushNotificationReceiptsAsync(receiptIdChunks[i])
+      );
       if (devMode) {
         functions.logger.debug(`Got set ${i + 1} of ${receiptIdChunks.length} of receipts`);
-        functions.logger.debug("receipts:", receipts);
       }
 
       // The receipts specify whether Apple or Google successfully received the
       // notification and information about an error, if one occurred.
       for (let i = 0; i < receipts.length; i++) {
-        const { message, details } = receipts[i];
+        const receiptId = receipts[i][0];
+        const receipt = receipts[i][1];
+
+        const { message, details } = receipt;
+
         if (details?.error) {
           if (devMode) {
-            functions.logger.debug("Error sending a ticket. Receipt:", receipts[i]);
+            functions.logger.debug(
+              `Error sending notification with ID ${receiptId}. Receipt:`,
+              receipt
+            );
           }
           response.failedTickets++;
 
