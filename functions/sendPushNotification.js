@@ -210,7 +210,8 @@ export default async (data, context) => {
     try {
       const receipts = await expo.getPushNotificationReceiptsAsync(receiptIdChunks[i]);
       if (devMode) {
-        functions.logger.debug(`Got set ${i} of ${receiptIdChunks.length} of receipts`);
+        functions.logger.debug(`Got set ${i + 1} of ${receiptIdChunks.length} of receipts`);
+        functions.logger.debug("receipts:", receipts);
       }
 
       // The receipts specify whether Apple or Google successfully received the
@@ -218,6 +219,9 @@ export default async (data, context) => {
       for (let i = 0; i < receipts.length; i++) {
         const { message, details } = receipts[i];
         if (details?.error) {
+          if (devMode) {
+            functions.logger.debug("Error sending a ticket. Receipt:", receipts[i]);
+          }
           response.failedTickets++;
 
           let failedPushToken;
@@ -258,6 +262,9 @@ export default async (data, context) => {
               };
           }
         } else {
+          if (devMode) {
+            functions.logger.debug("Ticket sent successfully");
+          }
           response.successfulTickets++;
         }
       }
