@@ -102,9 +102,11 @@ export default async (data, context) => {
         }
 
         tokens.push(docData.expoPushToken);
-        usersToReceiveNotification[docData.expoPushToken] = getFirestore().doc(
-          `users/${docData.latestUser}`
-        );
+        if (docData.latestUserId) {
+          usersToReceiveNotification[docData.expoPushToken] = getFirestore().doc(
+            `users/${docData.latestUserId}`
+          );
+        }
       }
     }
   });
@@ -187,7 +189,7 @@ export default async (data, context) => {
     );
   }
   // If no exception:
-  await addNotificationToUserDocuments(notification, devMode, usersToReceiveNotification);
+  await addNotificationToUserDocuments(notification, usersToReceiveNotification, devMode);
 
   if (devMode) {
     functions.logger.debug("Done adding record to Firestore, moving on to checking receipts");
@@ -208,18 +210,30 @@ export default async (data, context) => {
   // to retrieve batches of receipts from the Expo service.
   for (let i = 0; i < receiptIdChunks.length; i++) {
     try {
-      const receipts = Object.entries(
-        await expo.getPushNotificationReceiptsAsync(receiptIdChunks[i])
-      );
+      const receiptsObject = await expo.getPushNotificationReceiptsAsync(receiptIdChunks[i]);
+      const receipts = Object.entries(receiptsObject);
       if (devMode) {
-        functions.logger.debug(`Got set ${i + 1} of ${receiptIdChunks.length} of receipts`);
+        functions.logger.debug(
+          `Got set ${i + 1} of ${receiptIdChunks.length} of receipts: ${JSON.stringify(
+            receipts,
+            undefined,
+            2
+          )}`
+        );
       }
 
       // The receipts specify whether Apple or Google successfully received the
       // notification and information about an error, if one occurred.
-      for (let i = 0; i < receipts.length; i++) {
-        const receiptId = receipts[i][0];
-        const receipt = receipts[i][1];
+      for (let j = 0; j < receipts.length; j++) {
+        if (devMode) {
+          functions.logger.debug(
+            `Checking ticket ${j + 1} of ${receipts.length} from ticket ${i + 1} of ${
+              receiptIdChunks.length
+            } of receipts`
+          );
+        }
+        const receiptId = receipts[j][0];
+        const receipt = receipts[j][1];
 
         const { message, details } = receipt;
 
@@ -338,11 +352,21 @@ async function addNotificationToUserDocuments(notification, usersToReceiveNotifi
     sound: notification.sound,
     sendTime: FieldValue.serverTimestamp(),
   });
+
   if (devMode) {
     functions.logger.debug(`Added a record of the notification to ${notificationDocumentRef.path}`);
+
+    functions.logger.debug(
+      `Users who should get a reference added to their firestore document: ${JSON.stringify(
+        usersToReceiveNotification,
+        undefined,
+        2
+      )}`
+    );
   }
+
   // Add past notifications to each user's profile (uniquely, hence the set)
-  const users = new Set(Object.values(usersToReceiveNotification)).values();
+  const users = Array.from(new Set(Object.values(usersToReceiveNotification)));
 
   const userPastNotificationPromises = [];
   for (let i = 0; i < users.length; i++) {
