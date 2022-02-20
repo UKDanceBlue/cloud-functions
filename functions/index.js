@@ -14,8 +14,7 @@ export const sendPushNotification = functions.https.onCall(sendPushNotificationF
 
 export const sweepOldAccounts = functions.https.onRequest(sweepOldAccountsFunction);
 
-// This function will run on february 31st (it won't)
-export const syncDBFunds = functions.pubsub.schedule("0 0 5 31 2 ?").onRun(syncDBFundsFunction);
+export const syncDBFunds = functions.pubsub.schedule("every 24 hours").onRun(syncDBFundsFunction);
 
 export const importSpiritPoints = functions.https.onRequest(importSpiritPointsFunction);
 

@@ -17,7 +17,7 @@ export default async () => {
       try {
         // Load the given fiscal year from the database
         const response = await fetch(
-          `https://dancebluefundspreview.uky.edu/api/report/teamtotals/${fiscalYear}`,
+          `https://dancebluefunds.uky.edu/api/report/teamtotals/${fiscalYear}`,
           {
             headers: {
               method: "GET",
