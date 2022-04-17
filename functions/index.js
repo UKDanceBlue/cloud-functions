@@ -8,6 +8,7 @@ import importSpiritPointsFunction from "./importSpiritPoints.js";
 import writeLogFunction from "./writeLog.js";
 import updateTeamFunction from "./updateTeam.js";
 import updateUserClaimsFunction from "./updateUserClaims.js";
+import handleDeviceDocumentWriteFunction from "./handleDeviceDocumentWrite.js";
 
 initializeApp({ projectId: "react-danceblue" });
 
@@ -24,3 +25,5 @@ export const writeLog = functions.https.onRequest(writeLogFunction);
 export const updateTeam = functions.https.onCall(updateTeamFunction);
 
 export const updateUserClaims = functions.https.onCall(updateUserClaimsFunction);
+
+export const handleDeviceDocumentWrite = handleDeviceDocumentWriteFunction;
