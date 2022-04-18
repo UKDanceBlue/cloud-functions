@@ -15,19 +15,11 @@ const possibleQueryKeys = [
 ];
 
 /**
- * @typedef DirectoryLookupReturnType
- * @type {object}
- * @property {string} directoryDocumentId - the ID of the located firestore document.
- * @property {...} - the data of the located firestore document.
- */
-
-/**
  * Looks for a user in the firestore directory using whatever information is available and returns a single match or null, unless returnAll is true, in which case it returns an array of all matches.
  *
  * @param {{lastAssociatedUid: string, upn: string, email:string, firstName: string, lastName: string, spiritTeamId: string, committee: string, committeeRank: ("advisor" | "overall-chair" | "chair" | "coordinator" | "committee-member"), dbRole: ("public" | "team-member" | "committee")}} queryData - An object with any data known about the person being looked up to refine the search.
  * @param {boolean} [returnAll=false] If true, returns an array of all matches instead of just the first.
- *
- * @return {Promise<DirectoryLookupReturnType | DirectoryLookupReturnType[] | null>}
+ * @return {Promise<Object<string, string> | (Object<string, string>)[] | null>} - A promise that resolves to the first match or an array of all matches, or null if no match was found.
  */
 export default async function directoryLookup(queryData, returnAll = false) {
   functions.logger.log("Attempting a firestore directory lookup", queryData);
