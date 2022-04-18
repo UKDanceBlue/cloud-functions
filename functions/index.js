@@ -2,6 +2,7 @@ import * as functions from "firebase-functions";
 import { initializeApp } from "firebase-admin/app";
 
 import sendPushNotificationFunction from "./sendPushNotification.js";
+import processPushNotificationReceiptsFunction from "./processPushNotificationReceipts.js";
 import sweepOldAccountsFunction from "./sweepOldAccounts.js";
 import syncDBFundsFunction from "./syncDBFunds.js";
 import importSpiritPointsFunction from "./importSpiritPoints.js";
@@ -15,6 +16,8 @@ initializeApp({ projectId: "react-danceblue" });
 export const sendPushNotification = functions
   .runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
   .https.onCall(sendPushNotificationFunction);
+
+export const processPushNotificationReceipts = processPushNotificationReceiptsFunction;
 
 export const sweepOldAccounts = functions.https.onRequest(sweepOldAccountsFunction);
 

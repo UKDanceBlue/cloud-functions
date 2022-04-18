@@ -181,6 +181,8 @@ async function sendChunks(chunks, expo) {
     }
   }
 
+  // TODO handle DeviceNotRegistered error here
+
   // Remove any debug info from the ticket as this will be sent to the client.
   return ticketChunks.flat().map((ticket) => {
     delete ticket.__debug;
