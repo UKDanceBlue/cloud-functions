@@ -12,7 +12,9 @@ import handleDeviceDocumentWriteFunction from "./handleDeviceDocumentWrite.js";
 
 initializeApp({ projectId: "react-danceblue" });
 
-export const sendPushNotification = functions.https.onCall(sendPushNotificationFunction);
+export const sendPushNotification = functions
+  .runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
+  .https.onCall(sendPushNotificationFunction);
 
 export const sweepOldAccounts = functions.https.onRequest(sweepOldAccountsFunction);
 

@@ -8,8 +8,17 @@
     "ecmaVersion": 2020,
     "sourceType": "module"
   },
-  "extends": ["eslint:recommended", "google", "prettier"],
+  "settings": {
+    "jsdoc": {
+      "tagNamePreference": {
+        "returns": "return"
+      }
+    }
+  },
+  "plugins": ["jsdoc"],
+  "extends": ["eslint:recommended", "plugin:jsdoc/recommended", "google", "prettier"],
   "rules": {
-    "quotes": ["error", "double"]
+    "quotes": ["error", "double"],
+    "valid-jsdoc": 0
   }
 }
