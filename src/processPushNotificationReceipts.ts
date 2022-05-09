@@ -1,5 +1,5 @@
 import * as functions from "firebase-functions";
-import Expo from "expo-server-sdk";
+import Expo, { ExpoPushReceipt } from "expo-server-sdk";
 
 // Later, after the Expo push notification service has delivered the
 // notifications to Apple or Google (usually quickly, but allow the the service
@@ -17,9 +17,13 @@ import Expo from "expo-server-sdk";
 // your app. Expo does not control this policy and sends back the feedback from
 // Apple and Google so you can handle it appropriately.
 
+export type ProcessPushNotificationReceiptsArgument = {
+  receiptIds: string[];
+};
+
 export default functions
   .runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
-  .https.onCall(async (data, context) => {
+  .https.onCall(async (data: ProcessPushNotificationReceiptsArgument) => {
     const { receiptIds } = data;
     if (!Array.isArray(receiptIds)) {
       throw new functions.https.HttpsError(
@@ -27,15 +31,25 @@ export default functions
         "The function must be called with an object containing the string array 'receiptIds'."
       );
     }
-    const expo = new Expo(process.env.EXPO_ACCESS_TOKEN);
+
+    const EXPO_ACCESS_TOKEN = process.env.EXPO_ACCESS_TOKEN;
+
+    if (!EXPO_ACCESS_TOKEN) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "The Expo access token is not set."
+      );
+    }
+
+    const expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
 
     const receiptIdChunks = expo.chunkPushNotificationReceiptIds(receiptIds);
 
-    const receipts = receiptIds.reduce((prev, curr) => {
-      const tmp = { ...prev };
-      tmp[curr] = null;
-      return tmp;
-    }, {});
+    const receipts = {} as { [key: string]: ExpoPushReceipt | null };
+
+    receiptIds.forEach((receiptId) => {
+      receipts[receiptId] = null;
+    });
 
     for (const chunk of receiptIdChunks) {
       try {
@@ -43,9 +57,9 @@ export default functions
 
         // The receipts specify whether Apple or Google successfully received the
         // notification and information about an error, if one occurred.
-        Object.entries(receiptsFromChunk).forEach(({ 0: receiptID, 1: receipt }) => {
+        Object.entries(receiptsFromChunk).forEach(({ 0: receiptId, 1: receipt }) => {
           // TODO handle DeviceNotRegistered (and maybe MessageRateExceeded) here, all other errors go back to the client
-          receipts.push(receipt);
+          receipts[receiptId] = receipt;
         });
       } catch (error) {
         functions.logger.error(error);

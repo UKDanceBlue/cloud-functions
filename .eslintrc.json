@@ -1,0 +1,38 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "env": {
+    "es2021": true,
+    "node": true
+  },
+  "ignorePatterns": [
+    "**/build/**/*" // Ignore built files.
+  ],
+  "rules": {
+      "import/named": "off",
+      "import/namespace": "off",
+      "import/default": "off",
+      "import/no-named-as-default-member": "off",
+      "import/no-named-as-default": "off",
+      "import/no-cycle": "off",
+      "import/no-unused-modules": "off",
+      "import/no-deprecated": "off",
+    "quotes": ["error", "double"],
+    "import/no-unresolved": "off"
+  },
+  "parserOptions": {
+    "project": ["./tsconfig.json"],
+    "sourceType": "module",
+    "tsconfigRootDir": "."
+  },
+  "plugins": ["@typescript-eslint", "import", "node"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:import/errors",
+    "plugin:import/warnings",
+    "plugin:import/typescript",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:@typescript-eslint/recommended-requiring-type-checking",
+    "prettier"
+  ]
+}

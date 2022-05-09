@@ -1,9 +1,9 @@
 import { getAuth } from "firebase-admin/auth";
 import { HttpsError } from "firebase-functions/v1/https";
 import * as functions from "firebase-functions";
-import directoryLookup from "./directoryLookup.js";
+import directoryLookup from "./common/directoryLookup.js";
 
-export default async (data, context) => {
+export default functions.https.onCall(async (data, context) => {
   // TODO validate context.app.token (Firebase App Check)
 
   if (!context?.auth?.uid) {
@@ -15,15 +15,32 @@ export default async (data, context) => {
   const {
     uid,
     token: { email },
-  } = context?.auth;
+  } = context.auth;
 
-  const directoryEntry = await directoryLookup({
-    lastAssociatedUid: uid,
-    upn: email,
-    email,
-  });
+  if (!email) {
+    throw new HttpsError(
+      "permission-denied",
+      "The function must be called while authenticated with a valid email."
+    );
+  }
 
-  const customClaims = {};
+  const directoryEntry = await directoryLookup(
+    {
+      lastAssociatedUid: uid,
+      upn: email,
+      email,
+    },
+    false
+  );
+
+  if (Array.isArray(directoryEntry)) {
+    throw new HttpsError(
+      "cancelled",
+      "Uhh, that's not supposed to happen. The function 'directoryLookup' returned an array when told not too."
+    );
+  }
+
+  const customClaims: { [key: string]: string | number | boolean } = {};
 
   if (directoryEntry) {
     const { spiritTeamId, dbRole, committeeRank, committee, marathonAccess, spiritCaptain } =
@@ -54,4 +71,4 @@ export default async (data, context) => {
 
   functions.logger.log(`Attempting to add custom claims to ${uid}.`, customClaims);
   await firebaseAuth.setCustomUserClaims(uid, customClaims);
-};
+});
