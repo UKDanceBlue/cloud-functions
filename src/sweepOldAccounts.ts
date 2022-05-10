@@ -1,5 +1,5 @@
-import * as functions from "firebase-functions";
 import { getAuth } from "firebase-admin/auth";
+import * as functions from "firebase-functions";
 
 // TODO: update for new design
 

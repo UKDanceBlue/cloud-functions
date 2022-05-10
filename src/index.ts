@@ -1,17 +1,18 @@
 import { initializeApp } from "firebase-admin/app";
+import { Runnable } from "firebase-functions/v1";
 
-import sendPushNotificationFunction, {
-  SendPushNotificationArgument,
-} from "./src/sendPushNotification.js";
+import handleDeviceDocumentWriteFunction from "./handleDeviceDocumentWrite.js";
 import processPushNotificationReceiptsFunction, {
   ProcessPushNotificationReceiptsArgument,
-} from "./src/processPushNotificationReceipts.js";
-import sweepOldAccountsFunction from "./src/sweepOldAccounts.js";
-import syncDBFundsFunction from "./src/syncDBFunds.js";
-import writeLogFunction from "./src/writeLog.js";
-import updateUserClaimsFunction from "./src/updateUserClaims.js";
-import handleDeviceDocumentWriteFunction from "./src/handleDeviceDocumentWrite.js";
-import { Runnable } from "firebase-functions/v1";
+} from "./processPushNotificationReceipts.js";
+import sendPushNotificationFunction, {
+  SendPushNotificationArgument,
+} from "./sendPushNotification.js";
+import sweepOldAccountsFunction from "./sweepOldAccounts.js";
+import syncDBFundsFunction from "./syncDBFunds.js";
+import updateUserClaimsFunction from "./updateUserClaims.js";
+import writeLogFunction from "./writeLog.js";
+
 
 // TODO type all of these using CloudFunction and HttpsFunction by creating a with argument types for all of these functions
 

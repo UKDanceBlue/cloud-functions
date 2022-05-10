@@ -1,6 +1,5 @@
-import * as functions from "firebase-functions";
 import { getFirestore } from "firebase-admin/firestore";
-
+import * as functions from "firebase-functions";
 import fetch from "node-fetch";
 
 type DbFundsEntry = {

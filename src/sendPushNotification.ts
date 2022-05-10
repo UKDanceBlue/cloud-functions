@@ -1,17 +1,17 @@
-import { v4 as generateUuid } from "uuid";
-import * as functions from "firebase-functions";
-import {
-  DocumentData,
-  DocumentSnapshot,
-  getFirestore,
-  Query,
-  QueryDocumentSnapshot,
-} from "firebase-admin/firestore";
 import Expo, {
   ExpoPushErrorReceipt,
   ExpoPushMessage,
   ExpoPushSuccessTicket,
 } from "expo-server-sdk";
+import {
+  DocumentData,
+  DocumentSnapshot,
+  Query,
+  QueryDocumentSnapshot,
+  getFirestore,
+} from "firebase-admin/firestore";
+import * as functions from "firebase-functions";
+import { v4 as generateUuid } from "uuid";
 
 export type SendPushNotificationArgument = {
   notificationTitle?: string;

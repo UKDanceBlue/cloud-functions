@@ -1,5 +1,5 @@
-import * as functions from "firebase-functions";
 import Expo, { ExpoPushReceipt } from "expo-server-sdk";
+import * as functions from "firebase-functions";
 
 // Later, after the Expo push notification service has delivered the
 // notifications to Apple or Google (usually quickly, but allow the the service

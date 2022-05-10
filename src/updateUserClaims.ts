@@ -1,6 +1,7 @@
 import { getAuth } from "firebase-admin/auth";
-import { HttpsError } from "firebase-functions/v1/https";
 import * as functions from "firebase-functions";
+import { HttpsError } from "firebase-functions/v1/https";
+
 import directoryLookup from "./common/directoryLookup.js";
 
 export default functions.https.onCall(async (data, context) => {

@@ -25,7 +25,7 @@
     "@types/uuid": "^8.3.4",
     "@typescript-eslint/eslint-plugin": "^5.22.0",
     "@typescript-eslint/parser": "^5.22.0",
-    "eslint": "^8.15.0",
+    "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-import": "^2.26.0",
     "eslint-plugin-node": "^11.1.0",
@@ -33,5 +33,8 @@
     "firebase-tools": "^10.8.0",
     "prettier": "^2.6.2",
     "typescript": "^4.6.4"
+  },
+  "resolutions": {
+    "es-abstract": "1.19.5"
   }
 }
