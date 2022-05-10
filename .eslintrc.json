@@ -50,7 +50,7 @@
     "sourceType": "module",
     "tsconfigRootDir": "."
   },
-  "plugins": ["@typescript-eslint", "import", "node"],
+  "plugins": ["node"],
   "extends": [
     "eslint:recommended",
     "plugin:import/recommended",
