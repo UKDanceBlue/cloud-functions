@@ -2,13 +2,14 @@
   "name": "cloud-functions",
   "scripts": {
     "lint": "eslint .",
-    "build": "yarn lint && tsc",
-    "serve": "yarn build && firebase emulators:start --only functions",
+    "build": "tsc",
+    "start-emulator": "yarn build && firebase emulators:start --only functions",
     "shell": "yarn build && firebase functions:shell",
     "start": "yarn shell",
-    "deploy": "yarn build && firebase deploy --only functions",
+    "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
   },
+  "main": "build/index.js",
   "private": true,
   "type": "module",
   "dependencies": {

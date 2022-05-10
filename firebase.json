@@ -1,7 +1,8 @@
 {
   "functions": {
     "predeploy": ["yarn lint", "yarn build"],
-    "source": "modules/functions"
+    "source": ".",
+    "runtime": "nodejs16"
   },
   "emulators": {
     "functions": {
@@ -9,9 +10,6 @@
     },
     "pubsub": {
       "port": 8085
-    },
-    "ui": {
-      "enabled": true
     }
   }
 }
