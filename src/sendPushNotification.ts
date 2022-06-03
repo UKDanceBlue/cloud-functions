@@ -1,4 +1,5 @@
-import Expo, {
+import {
+  Expo,
   ExpoPushErrorReceipt,
   ExpoPushMessage,
   ExpoPushSuccessTicket,
@@ -39,9 +40,9 @@ export default functions
 
     // Make sure the user has the committeeRank claim.
     if (
-      (typeof senderCommitteeRank === "string" &&
-        !["advisor", "overall-chair", "chair"].includes(senderCommitteeRank)) ||
-      senderCommittee === "tech-committee"
+      typeof senderCommitteeRank === "string" &&
+      !["advisor", "overall-chair", "chair"].includes(senderCommitteeRank) &&
+      senderCommittee !== "tech-committee"
     ) {
       throw new functions.https.HttpsError(
         "permission-denied",
@@ -91,7 +92,7 @@ export default functions
       );
     }
 
-    if (!userDocuments || !Array.isArray(typeof userDocuments)) {
+    if (!userDocuments || !Array.isArray(userDocuments)) {
       throw new functions.https.HttpsError("internal", "User document type assertion failed");
     }
 
@@ -109,7 +110,7 @@ export default functions
     );
 
     // Create a new Expo SDK client
-    const expo = new Expo({ accessToken: process.env.EXPO_PUSH_TOKEN });
+    const expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
 
     const chunks = chunkNotification(notificationContent, userDocuments, expo);
 
@@ -149,7 +150,7 @@ async function getUserDocumentsForNotification(notificationAudiences: {
 
   const notificationAudiencesEntries = Object.entries(notificationAudiences);
   for (const [audience, audienceValues] of notificationAudiencesEntries) {
-    usersQuery = usersQuery.where(audience, "in", audienceValues);
+    usersQuery = usersQuery.where(`attributes.${audience}`, "in", audienceValues);
 
     if (devMode) {
       functions.logger.log(
