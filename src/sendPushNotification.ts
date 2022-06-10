@@ -120,8 +120,8 @@ export default functions
 /**
  * Find users who should receive a notification.
  *
- * @param notificationAudiences - The audiences to send the notification to.
- * @return - The user documents of the users who should receive the notification.
+ * @param notificationAudiences The audiences to send the notification to.
+ * @return The user documents of the users who should receive the notification.
  */
 async function getUserDocumentsForNotification(notificationAudiences: {
   [key: string]: string[];
@@ -166,10 +166,10 @@ async function getUserDocumentsForNotification(notificationAudiences: {
 /**
  * This function breaks the notification up into chunks and adds a to field with the push notifications from userDocuments.
  *
- * @param notificationContent - The content of the notification.
- * @param userDocuments - The user documents to send the notification to.
- * @param expo - The Expo SDK client.
- * @return - The chunked notifications.
+ * @param notificationContent The content of the notification.
+ * @param userDocuments The user documents to send the notification to.
+ * @param expo The Expo SDK client.
+ * @return The chunked notifications.
  */
 function chunkNotification(
   notificationContent: { title: string; body: string; payload: unknown },
@@ -208,9 +208,9 @@ function chunkNotification(
 /**
  * This function sends the chunks of notifications to Expo.
  *
- * @param {((Expo.ExpoPushMessage)[])[]} chunks - The chunks of notifications to send.
- * @param {Expo} expo - The Expo SDK client.
- * @return {Promise<(Expo.ExpoPushSuccessTicket | Expo.ExpoPushErrorReceipt)[]>} - The promise of the Expo SDK client.
+ * @param chunks The chunks of notifications to send.
+ * @param expo The Expo SDK client.
+ * @return The promise of the Expo SDK client.
  */
 async function sendChunks(
   chunks: ExpoPushMessage[][],

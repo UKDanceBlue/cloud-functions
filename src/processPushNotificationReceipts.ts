@@ -1,4 +1,4 @@
-import Expo, { ExpoPushReceipt } from "expo-server-sdk";
+import { Expo, ExpoPushReceipt } from "expo-server-sdk";
 import * as functions from "firebase-functions";
 
 // Later, after the Expo push notification service has delivered the
@@ -45,7 +45,7 @@ export default functions
 
     const receiptIdChunks = expo.chunkPushNotificationReceiptIds(receiptIds);
 
-    const receipts = {} as { [key: string]: ExpoPushReceipt | null };
+    const receipts: { [key: string]: ExpoPushReceipt | null } = {};
 
     receiptIds.forEach((receiptId) => {
       receipts[receiptId] = null;
