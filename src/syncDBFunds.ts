@@ -1,4 +1,5 @@
 import { getFirestore } from "firebase-admin/firestore";
+import { ExplicitParameterValue, getRemoteConfig } from "firebase-admin/remote-config";
 import * as functions from "firebase-functions";
 import fetch from "node-fetch";
 
@@ -30,16 +31,18 @@ async function queryDbFunds(fiscalYear: string, authToken: string): Promise<unkn
   return response.json();
 }
 
-export default functions.pubsub.schedule("every 24 hours").onRun(async () => {
+export default functions.runWith({ secrets: ["DB_FUNDS_API_KEY"] }).pubsub.schedule("every 24 hours").onRun(async () => {
   // Get config info from firebase
-  const dbFundsSyncConfig = (await getFirestore().doc("configs/db-funds-sync").get()).data();
-  if (!dbFundsSyncConfig) {
+  const rawDbFundsSyncConfig = (await getRemoteConfig().getTemplate()).parameters['dbfunds_sync_config'].defaultValue as ExplicitParameterValue;
+  if (!rawDbFundsSyncConfig || rawDbFundsSyncConfig.value === 'undefined') {
     functions.logger.error("db-funds-sync config not set");
     return;
   }
 
-  const currentFiscalYears = dbFundsSyncConfig.currentFiscalYears as unknown;
-  const authToken = dbFundsSyncConfig.authToken as unknown;
+  const dbFundsSyncConfig = JSON.parse(rawDbFundsSyncConfig.value) as { currentFiscalYears: string[]; };
+
+  const currentFiscalYears = dbFundsSyncConfig.currentFiscalYears;
+  const authToken = process.env.EXPO_ACCESS_TOKEN;
 
   // Check types for dbFundsSyncConfig
   if (!Array.isArray(currentFiscalYears)) {
