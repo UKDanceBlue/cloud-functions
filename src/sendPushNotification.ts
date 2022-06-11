@@ -126,7 +126,6 @@ export default functions
 async function getUserDocumentsForNotification(notificationAudiences: {
   [key: string]: string[];
 }): Promise<QueryDocumentSnapshot<DocumentData>[]> {
-  const devMode = true;
   // Check number of audiences
   if (
     !(typeof notificationAudiences === "object" && Object.keys(notificationAudiences).length > 0)
@@ -152,11 +151,6 @@ async function getUserDocumentsForNotification(notificationAudiences: {
   for (const [audience, audienceValues] of notificationAudiencesEntries) {
     usersQuery = usersQuery.where(`attributes.${audience}`, "in", audienceValues);
 
-    if (devMode) {
-      functions.logger.log(
-        `Added audience ${audience} with values ${JSON.stringify(audienceValues)} to query.`
-      );
-    }
   }
 
   const users = await usersQuery.get();
