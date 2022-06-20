@@ -33,8 +33,8 @@ async function queryDbFunds(fiscalYear: string, authToken: string): Promise<unkn
 
 export default functions.runWith({ secrets: ["DB_FUNDS_API_KEY"] }).pubsub.schedule("every 24 hours").onRun(async () => {
   // Get config info from firebase
-  const rawDbFundsSyncConfig = (await getRemoteConfig().getTemplate()).parameters['dbfunds_sync_config'].defaultValue as ExplicitParameterValue;
-  if (!rawDbFundsSyncConfig || rawDbFundsSyncConfig.value === 'undefined') {
+  const rawDbFundsSyncConfig = (await getRemoteConfig().getTemplate()).parameters["dbfunds_sync_config"].defaultValue as ExplicitParameterValue;
+  if (!rawDbFundsSyncConfig || rawDbFundsSyncConfig.value === "undefined") {
     functions.logger.error("db-funds-sync config not set");
     return;
   }

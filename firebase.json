@@ -6,7 +6,10 @@
   },
   "emulators": {
     "functions": {
-      "port": 5001
+      "port": 5001,
+      "predeploy": ["yarn lint", "yarn build"],
+      "source": ".",
+      "runtime": "nodejs16"
     },
     "pubsub": {
       "port": 8085

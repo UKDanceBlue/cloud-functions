@@ -1,6 +1,7 @@
-import { initializeApp } from "firebase-admin/app";
+import { applicationDefault, initializeApp } from "firebase-admin/app";
 import { Runnable } from "firebase-functions/v1";
 
+import generateCustomTokenFunction from "./generateCustomToken.js";
 import handleDeviceDocumentWriteFunction from "./handleDeviceDocumentWrite.js";
 import processPushNotificationReceiptsFunction, {
   ProcessPushNotificationReceiptsArgument,
@@ -10,13 +11,12 @@ import sendPushNotificationFunction, {
 } from "./sendPushNotification.js";
 import sweepOldAccountsFunction from "./sweepOldAccounts.js";
 import syncDBFundsFunction from "./syncDBFunds.js";
-import updateUserClaimsFunction from "./updateUserClaims.js";
 import writeLogFunction from "./writeLog.js";
-
 
 // TODO type all of these using CloudFunction and HttpsFunction by creating a with argument types for all of these functions
 
-initializeApp({ projectId: "react-danceblue" });
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+initializeApp({ projectId: "react-danceblue", credential: applicationDefault() });
 
 export const sendPushNotification: Runnable<SendPushNotificationArgument> =
   sendPushNotificationFunction;
@@ -30,6 +30,6 @@ export const syncDBFunds = syncDBFundsFunction;
 
 export const writeLog = writeLogFunction;
 
-export const updateUserClaims: Runnable<void> = updateUserClaimsFunction;
-
 export const handleDeviceDocumentWrite = handleDeviceDocumentWriteFunction;
+
+export const generateCustomToken = generateCustomTokenFunction;
