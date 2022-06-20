@@ -1,4 +1,4 @@
-import { getAuth } from "firebase-admin/auth";
+import { UpdateRequest, getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import * as functions from "firebase-functions";
 import { decode } from "jsonwebtoken";
@@ -26,7 +26,9 @@ export default functions.https.onCall(async (data: { accessToken: string, nonce?
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore nonce is a non-standard entry that Azure adds
   if (nonce != null && decodedAccessToken.header.nonce != nonce) {
-    throw new Error("Nonce mismatch");
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore nonce is a non-standard entry that Azure adds
+    throw new Error(`Nonce mismatch (expected ${nonce}, got ${decodedAccessToken.header.nonce as string})`);
   }
 
   if (decodedAccessToken?.payload == null) {
@@ -50,12 +52,26 @@ export default functions.https.onCall(async (data: { accessToken: string, nonce?
 
   const profile = await (await fetch("https://graph.microsoft.com/v1.0/me/", { headers: { "Authorization": `Bearer ${accessToken}` } })).json() as Record<string, unknown>;
 
-  const profileEmail = profile.mail;
-
   const uid = (profile.id as string) ?? v4();
+
+  const profileEmail = profile.mail;
 
   if (profileEmail != null && typeof profileEmail === "string") {
     userDocument.email = profileEmail;
+  }
+
+  let profilePhoneNumber = profile.mobilePhone as string;
+
+  if (profilePhoneNumber != null && typeof profilePhoneNumber === "string") {
+    userDocument.phoneNumber = profilePhoneNumber.replace(" ", "");
+  } else {
+    const businessPhones = profile.businessPhones;
+    if (businessPhones != null && Array.isArray(businessPhones) && businessPhones.length >= 1) {
+      if (typeof businessPhones[0] === "string") {
+        profilePhoneNumber = businessPhones[0];
+        userDocument.phoneNumber = profilePhoneNumber.replace(" ", "");
+      }
+    }
   }
 
   const directoryEntry = await directoryLookup({ upn, firstName, lastName, email: (profileEmail as string) ?? undefined });
@@ -85,11 +101,27 @@ export default functions.https.onCall(async (data: { accessToken: string, nonce?
     throw new Error("No sub in the access token");
   }
 
-  const db = getFirestore();
-  await db.collection("users").doc(uid).set({ ...userDocument, attributes: { ...customClaims } }, { merge: true });
+  const userData: UpdateRequest = {
+    displayName: `${firstName} ${lastName}`
+  }
+
+  if (userDocument.email != null) {
+    userData.email = userDocument.email;
+  }
+
+  if (userDocument.phoneNumber != null) {
+    userData.phoneNumber = userDocument.phoneNumber;
+  }
+
 
   const auth = getAuth();
+
+  await auth.createUser({ uid, displayName: `${firstName} ${lastName}`, email: userDocument.email, phoneNumber: userDocument.phoneNumber, emailVerified: true });
+
   const customToken = await auth.createCustomToken(uid, customClaims);
+
+  const db = getFirestore();
+  await db.collection("users").doc(uid).set({ ...userDocument, attributes: { ...customClaims } }, { merge: true });
 
   return customToken;
 });
