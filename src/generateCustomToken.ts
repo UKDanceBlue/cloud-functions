@@ -105,18 +105,19 @@ export default functions.https.onCall(async (data: { accessToken: string, nonce?
     displayName: `${firstName} ${lastName}`
   }
 
-  if (userDocument.email != null) {
+  if(userDocument.email != null) {
     userData.email = userDocument.email;
   }
 
-  if (userDocument.phoneNumber != null) {
+  if(userDocument.phoneNumber != null) {
     userData.phoneNumber = userDocument.phoneNumber;
   }
 
-
   const auth = getAuth();
 
-  await auth.createUser({ uid, displayName: `${firstName} ${lastName}`, email: userDocument.email, phoneNumber: userDocument.phoneNumber, emailVerified: true });
+  if((await auth.getUsers([{uid}])).users.length === 0) {
+    await auth.createUser({uid, displayName: `${firstName} ${lastName}`, email: userDocument.email, phoneNumber: userDocument.phoneNumber, emailVerified: true});
+  }
 
   const customToken = await auth.createCustomToken(uid, customClaims);
 
