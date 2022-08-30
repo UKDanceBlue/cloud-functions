@@ -13,7 +13,6 @@ export default functions.firestore.document("devices/{deviceId}").onWrite(async 
 
   // If a device no longer gets notifications or does not have a user anymore, remove the push token from the user.
   if (
-    
     (oldDocument?.expoPushToken && (!updatedDocument || !updatedDocument.expoPushToken)) ||
     (oldDocument?.latestUserId && (!updatedDocument || !updatedDocument.latestUserId))
   ) {

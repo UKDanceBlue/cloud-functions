@@ -6,9 +6,9 @@ import {
 } from "expo-server-sdk";
 import {
   DocumentData,
-  DocumentSnapshot,
   Query,
   QueryDocumentSnapshot,
+  WriteResult,
   getFirestore,
 } from "firebase-admin/firestore";
 import * as functions from "firebase-functions";
@@ -21,6 +21,7 @@ export type SendPushNotificationArgument = {
   // If this is going to specific users we get *notificationRecipients*, if many we get *notificationAudiences*.
   notificationAudiences?: { [key: string]: string[] };
   notificationRecipients?: string[];
+  sendToAll?: boolean;
 };
 
 export default functions
@@ -39,9 +40,14 @@ export default functions
     } = context.auth;
 
     // Make sure the user has the committeeRank claim.
+    if (typeof senderCommitteeRank !== "string") {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "This user does not have the committeeRank claim."
+      );
+    }
     if (
-      typeof senderCommitteeRank === "string" &&
-      !["advisor", "overall-chair", "chair"].includes(senderCommitteeRank) &&
+      !(["advisor", "overall-chair", "chair"].includes(senderCommitteeRank)) &&
       senderCommittee !== "tech-committee"
     ) {
       throw new functions.https.HttpsError(
@@ -54,9 +60,10 @@ export default functions
       notificationTitle,
       notificationBody,
       notificationPayload,
-      // If this is going to specific users we get *notificationRecipients*, if many we get *notificationAudiences*.
+      // If this is going to specific users we get *notificationRecipients*, if many we get *notificationAudiences*, if we are sending to all devices (NOT LIMITED TO USERS) we get sendToAll
       notificationAudiences,
       notificationRecipients,
+      sendToAll
     } = data;
 
     if (!notificationTitle) {
@@ -65,6 +72,14 @@ export default functions
 
     if (!notificationBody) {
       throw new functions.https.HttpsError("invalid-argument", "Notification body is required.");
+    }
+
+    // Make sure only one of notificationAudiences, notificationRecipients, or sendToAll is specified.
+    if ( notificationAudiences && notificationRecipients || notificationAudiences && sendToAll || notificationRecipients && sendToAll) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Only one of notificationAudiences, notificationRecipients, or sendToAll is allowed."
+      );
     }
 
     const firestore = getFirestore();
@@ -78,41 +93,74 @@ export default functions
     };
     const notificationDocumentCreation = notificationDocument.create(notificationContent);
 
-    let userDocuments;
-
-    if (notificationAudiences) {
-      // Get the user documents for the notification.
-      userDocuments = await getUserDocumentsForNotification(notificationAudiences);
-    } else if (notificationRecipients && Array.isArray(notificationRecipients)) {
-      // Get the user documents for the notification.
-      userDocuments = await Promise.all(
-        notificationRecipients.map((recipient) =>
-          firestore.collection("users").doc(recipient).get()
-        )
-      );
-    }
-
-    if (!userDocuments || !Array.isArray(userDocuments)) {
-      throw new functions.https.HttpsError("internal", "User document type assertion failed");
-    }
-
-    // Make sure the notification's document has been created before we add a reference to it.
-    await notificationDocumentCreation;
-
-    // Add the reference to the notification to the user documents.
-    await Promise.all(
-      userDocuments.map((userDocument) =>
-        // Update the user document.
-        firestore.collection(`users/${userDocument.id}/notifications`).doc(notificationId).set({
-          ref: notificationDocument,
-        })
-      )
-    );
-
     // Create a new Expo SDK client
     const expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
 
-    const chunks = chunkNotification(notificationContent, userDocuments, expo);
+    const tokens: string[] = [];
+
+    if (sendToAll) {
+      const deviceDocuments = await firestore.collection("devices").where("expoPushToken", "!=", null).get();
+
+      const addNotificationToUsers: Promise<WriteResult>[] = [];
+
+      // Make sure the notification's document has been created before we add a reference to it.
+      await notificationDocumentCreation;
+
+      for (const deviceDocument of deviceDocuments.docs) {
+        const device = deviceDocument.data() as { expoPushToken: string, latestUserId?: string | null };
+        tokens.push(device.expoPushToken);
+
+        if (device.latestUserId != null) {
+          addNotificationToUsers.push(
+            firestore.collection(`users/${device.latestUserId}/notifications`).doc(notificationId).set({
+              ref: notificationDocument,
+            })
+          );
+        }
+      }
+
+      await Promise.all(addNotificationToUsers);
+    } else {
+      let userDocuments;
+
+      if (notificationAudiences) {
+        // Get the user documents for the notification.
+        userDocuments = await getUserDocumentsForNotification(notificationAudiences);
+      } else if (notificationRecipients && Array.isArray(notificationRecipients)) {
+        // Get the user documents for the notification.
+        userDocuments = await Promise.all(
+          notificationRecipients.map((recipient) =>
+            firestore.collection("users").doc(recipient).get()
+          )
+        );
+      }
+
+      if (!userDocuments || !Array.isArray(userDocuments)) {
+        throw new functions.https.HttpsError("internal", "User document type assertion failed");
+      }
+
+      // Make sure the notification's document has been created before we add a reference to it.
+      await notificationDocumentCreation;
+
+      // Add the reference to the notification to the user documents.
+      await Promise.all(
+        userDocuments.map((userDocument) =>
+          // Update the user document.
+          firestore.collection(`users/${userDocument.id}/notifications`).doc(notificationId).set({
+            ref: notificationDocument,
+          })
+        )
+      );
+
+      userDocuments.forEach((userDocument) => {
+        const registeredPushTokens = userDocument.get("registeredPushTokens") as unknown;
+        if (Array.isArray(registeredPushTokens)) {
+          registeredPushTokens.forEach((token: string) => tokens.push(token));
+        }
+      });
+    }
+
+    const chunks = chunkNotification(notificationContent, tokens, expo);
 
     return sendChunks(chunks, expo);
   });
@@ -167,17 +215,9 @@ async function getUserDocumentsForNotification(notificationAudiences: {
  */
 function chunkNotification(
   notificationContent: { title: string; body: string; payload: unknown },
-  userDocuments: DocumentSnapshot[],
+  tokens: string[],
   expo: Expo
 ): ExpoPushMessage[][] {
-  const tokens: string[] = [];
-  userDocuments.forEach((userDocument) => {
-    const registeredPushTokens = userDocument.get("registeredPushTokens") as unknown;
-    if (Array.isArray(registeredPushTokens)) {
-      registeredPushTokens.forEach((token: string) => tokens.push(token));
-    }
-  });
-
   // !! Create the messages that you want to send to clients !!
   const messages = [];
   for (const pushToken of tokens) {
