@@ -22,12 +22,12 @@ export default functionsFirestore.document("/spirit/teams/{teamId}/{opportunityI
       return change.after.ref.delete();
     }
 
-    // Make a copy under the relevant opportunity
-    const opportunityEntryDocument = firestore.doc(`/spirit/opportunities/${opportunityId}/${change.after.id}`);
+    // Make a copy to /spirit/opportunities/documents/{opportunityId}/pointEntries/{entryId}
+    const opportunityEntryDocument = firestore.doc(`/spirit/opportunities/documents/${opportunityId}/pointEntries/${change.after.id}`);
     batch.set(opportunityEntryDocument, entry);
 
-    // Increment /spirit/teams/{teamId}/info.totalPoints and /spirit/teams/{teamId}/info.individualTotals
-    const teamInfoDocument = firestore.doc(`/spirit/teams/${teamId}/info`);
+    // Increment /spirit/teams/documents/{teamId}.totalPoints and /spirit/teams/documents/{teamId}.individualTotals
+    const teamInfoDocument = firestore.doc(`/spirit/teams/documents/${teamId}/info`);
     batch.update(teamInfoDocument, {
       totalPoints: FieldValue.increment(entry.points),
     });
@@ -35,12 +35,12 @@ export default functionsFirestore.document("/spirit/teams/{teamId}/{opportunityI
       [`individualTotals.${entry.linkblue}`]: FieldValue.increment(entry.points),
     });
 
-    // Increment /spirit/teams/info.points.{teamId}
+    // Increment /spirit/teams.points.{teamId}
     const rootTeamsDoc = firestore.doc("/spirit/teams");
     batch.update(rootTeamsDoc, new FieldPath("points", teamId), FieldValue.increment(entry.points));
 
-    // Increment /spirit/opportunities/{opportunityId}.totalPoints
-    const opportunityInfoDocument = firestore.doc(`/spirit/opportunities/${opportunityId}/info`);
+    // Increment /spirit/opportunities/documents/{opportunityId}.totalPoints
+    const opportunityInfoDocument = firestore.doc(`/spirit/opportunities/documents/${opportunityId}`);
     batch.update(opportunityInfoDocument, {
       totalPoints: FieldValue.increment(entry.points),
     });
@@ -61,12 +61,12 @@ export default functionsFirestore.document("/spirit/teams/{teamId}/{opportunityI
       return;
     }
 
-    // Delete the copy under the relevant opportunity
-    const opportunityEntryDocument = firestore.doc(`/spirit/opportunities/${opportunityId}/${change.before.id}`);
+    // Delete /spirit/opportunities/documents/{opportunityId}/pointEntries/{entryId}
+    const opportunityEntryDocument = firestore.doc(`/spirit/opportunities/documents/${opportunityId}/pointEntries/${change.before.id}`);
     batch.delete(opportunityEntryDocument);
 
-    // Decrement /spirit/teams/{teamId}/info.totalPoints and /spirit/teams/{teamId}/info.individualTotals
-    const teamInfoDocument = firestore.doc(`/spirit/teams/${teamId}/info`);
+    // Decrement /spirit/teams/documents/{teamId}.totalPoints and /spirit/teams/documents/{teamId}.individualTotals
+    const teamInfoDocument = firestore.doc(`/spirit/teams/documents/${teamId}/info`);
     batch.update(teamInfoDocument, {
       totalPoints: FieldValue.increment(-entry.points),
     });
@@ -74,12 +74,12 @@ export default functionsFirestore.document("/spirit/teams/{teamId}/{opportunityI
       [`individualTotals.${entry.linkblue}`]: FieldValue.increment(-entry.points),
     });
 
-    // Decrement /spirit/teams/info.points.{teamId}
+    // Decrement /spirit/teams.points.{teamId}
     const rootTeamsDoc = firestore.doc("/spirit/teams");
     batch.update(rootTeamsDoc, new FieldPath("points", teamId), FieldValue.increment(-entry.points));
 
-    // Decrement /spirit/opportunities/{opportunityId}.totalPoints
-    const opportunityInfoDocument = firestore.doc(`/spirit/opportunities/${opportunityId}/info`);
+    // Decrement /spirit/opportunities/documents/{opportunityId}.totalPoints
+    const opportunityInfoDocument = firestore.doc(`/spirit/opportunities/documents/${opportunityId}`);
     batch.update(opportunityInfoDocument, {
       totalPoints: FieldValue.increment(-entry.points),
     });
