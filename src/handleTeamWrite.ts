@@ -14,11 +14,7 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}").o
   }
 
   const batch = getFirestore().batch();
-  const basicInfoDoc = getFirestore().doc(`/spirit/teams/basicInfo/${teamId}`);
-  batch.set(basicInfoDoc, {
-    name,
-    teamClass,
-    totalPoints,
-  }, { merge: true });
+  const basicInfoDoc = getFirestore().doc("/spirit/teams");
+  batch.set(basicInfoDoc, {[teamId]: { name, teamClass, totalPoints }}, { merge: true });
   await batch.commit();
 });
