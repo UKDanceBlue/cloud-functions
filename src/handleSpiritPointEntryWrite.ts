@@ -1,19 +1,19 @@
 import { FieldPath, FieldValue, getFirestore,  } from "firebase-admin/firestore";
 import { firestore as functionsFirestore } from "firebase-functions";
 
-import { isSpiritPointEntry } from "./types/FirestoreSpiritPointEntry";
+import { isSpiritPointEntry } from "./types/FirestoreSpiritPointEntry.js";
 
-export default functionsFirestore.document("/spirit/teams/{teamId}/{opportunityId}").onWrite(async (change, context) => {
+export default functionsFirestore.document("/spirit/teams/documents/{teamId}/pointEntries/{entryId}").onWrite(async (change, context) => {
   // Get firestore
   const firestore = getFirestore();
   const batch = firestore.batch();
 
   const teamId = context.params.teamId as string;
-  const opportunityId = context.params.opportunityId as string;
 
   if (context.eventType === "google.firestore.document.create") {
     const entry = change.after.data();
-    if (entry == null) {
+
+    if (entry == null || entry.opportunityId == null) {
       return;
     }
 
@@ -23,7 +23,7 @@ export default functionsFirestore.document("/spirit/teams/{teamId}/{opportunityI
     }
 
     // Make a copy to /spirit/opportunities/documents/{opportunityId}/pointEntries/{entryId}
-    const opportunityEntryDocument = firestore.doc(`/spirit/opportunities/documents/${opportunityId}/pointEntries/${change.after.id}`);
+    const opportunityEntryDocument = firestore.doc(`/spirit/opportunities/documents/${entry.opportunityId}/pointEntries/${change.after.id}`);
     batch.set(opportunityEntryDocument, entry);
 
     // Increment /spirit/teams/documents/{teamId}.totalPoints and /spirit/teams/documents/{teamId}.individualTotals
@@ -40,7 +40,7 @@ export default functionsFirestore.document("/spirit/teams/{teamId}/{opportunityI
     batch.update(rootTeamsDoc, new FieldPath("points", teamId), FieldValue.increment(entry.points));
 
     // Increment /spirit/opportunities/documents/{opportunityId}.totalPoints
-    const opportunityInfoDocument = firestore.doc(`/spirit/opportunities/documents/${opportunityId}`);
+    const opportunityInfoDocument = firestore.doc(`/spirit/opportunities/documents/${entry.opportunityId}`);
     batch.update(opportunityInfoDocument, {
       totalPoints: FieldValue.increment(entry.points),
     });
@@ -52,7 +52,8 @@ export default functionsFirestore.document("/spirit/teams/{teamId}/{opportunityI
     });
   } else if(context.eventType === "google.firestore.document.delete") {
     const entry = change.before.data();
-    if (entry == null) {
+
+    if (entry == null || entry.opportunityId == null) {
       return;
     }
 
@@ -62,7 +63,7 @@ export default functionsFirestore.document("/spirit/teams/{teamId}/{opportunityI
     }
 
     // Delete /spirit/opportunities/documents/{opportunityId}/pointEntries/{entryId}
-    const opportunityEntryDocument = firestore.doc(`/spirit/opportunities/documents/${opportunityId}/pointEntries/${change.before.id}`);
+    const opportunityEntryDocument = firestore.doc(`/spirit/opportunities/documents/${entry.opportunityId}/pointEntries/${change.before.id}`);
     batch.delete(opportunityEntryDocument);
 
     // Decrement /spirit/teams/documents/{teamId}.totalPoints and /spirit/teams/documents/{teamId}.individualTotals
@@ -79,7 +80,7 @@ export default functionsFirestore.document("/spirit/teams/{teamId}/{opportunityI
     batch.update(rootTeamsDoc, new FieldPath("points", teamId), FieldValue.increment(-entry.points));
 
     // Decrement /spirit/opportunities/documents/{opportunityId}.totalPoints
-    const opportunityInfoDocument = firestore.doc(`/spirit/opportunities/documents/${opportunityId}`);
+    const opportunityInfoDocument = firestore.doc(`/spirit/opportunities/documents/${entry.opportunityId}`);
     batch.update(opportunityInfoDocument, {
       totalPoints: FieldValue.increment(-entry.points),
     });

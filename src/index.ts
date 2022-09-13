@@ -3,15 +3,15 @@ import { Runnable } from "firebase-functions/v1";
 
 import generateCustomTokenFunction from "./generateCustomToken.js";
 import handleDeviceDocumentWriteFunction from "./handleDeviceDocumentWrite.js";
+import handleOpportunityWriteFunction from "./handleOpportunityWrite.js";
+import handleSpiritPointEntryWriteFunction from "./handleSpiritPointEntryWrite.js";
 import processPushNotificationReceiptsFunction, {
   ProcessPushNotificationReceiptsArgument,
 } from "./processPushNotificationReceipts.js";
 import sendPushNotificationFunction, {
   SendPushNotificationArgument,
 } from "./sendPushNotification.js";
-import sweepOldAccountsFunction from "./sweepOldAccounts.js";
 import syncDBFundsFunction from "./syncDBFunds.js";
-import writeLogFunction from "./writeLog.js";
 
 // TODO type all of these using CloudFunction and HttpsFunction by creating a with argument types for all of these functions
 
@@ -24,12 +24,12 @@ export const sendPushNotification: Runnable<SendPushNotificationArgument> =
 export const processPushNotificationReceipts: Runnable<ProcessPushNotificationReceiptsArgument> =
   processPushNotificationReceiptsFunction;
 
-export const sweepOldAccounts = sweepOldAccountsFunction;
-
 export const syncDBFunds = syncDBFundsFunction;
-
-export const writeLog = writeLogFunction;
 
 export const handleDeviceDocumentWrite = handleDeviceDocumentWriteFunction;
 
 export const generateCustomToken = generateCustomTokenFunction;
+
+export const handleSpiritPointEntryWrite = handleSpiritPointEntryWriteFunction;
+
+export const handleOpportunityWrite = handleOpportunityWriteFunction;
