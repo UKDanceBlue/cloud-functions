@@ -2,13 +2,18 @@
   "functions": {
     "predeploy": ["yarn lint", "yarn build"],
     "source": ".",
-    "runtime": "nodejs16"
+    "runtime": "nodejs16",
+    "ignore": [
+      "src/**/*",
+      "**/.*",
+      "**/*.log*"
+    ]
   },
   "emulators": {
     "functions": {
       "port": 5001,
       "predeploy": ["yarn lint", "yarn build"],
-      "source": ".",
+      "source": "./build",
       "runtime": "nodejs16"
     },
     "pubsub": {
