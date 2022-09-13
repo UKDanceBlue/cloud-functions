@@ -34,7 +34,7 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}/poi
     logger.debug(`Added "Delete opportunityEntryDocument: ${opportunityEntryDocument.path}" to batch`);
 
     // Decrement /spirit/teams/documents/{teamId}.totalPoints and /spirit/teams/documents/{teamId}.individualTotals.{linkblue}
-    const teamInfoDocument = firestore.doc(`/spirit/teams/documents/${teamId}/info`);
+    const teamInfoDocument = firestore.doc(`/spirit/teams/documents/${teamId}`);
     deletionBatch.update(teamInfoDocument, {
       totalPoints: FieldValue.increment(-entry.points),
     });
@@ -95,7 +95,7 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}/poi
     logger.debug(`Added "Create opportunityEntryDocument: ${opportunityEntryDocument.path}" to batch`);
 
     // Increment /spirit/teams/documents/{teamId}.totalPoints and /spirit/teams/documents/{teamId}.individualTotals.{linkblue}
-    const teamInfoDocument = firestore.doc(`/spirit/teams/documents/${teamId}/info`);
+    const teamInfoDocument = firestore.doc(`/spirit/teams/documents/${teamId}/`);
     creationBatch.update(teamInfoDocument, {
       totalPoints: FieldValue.increment(entry.points),
     });
