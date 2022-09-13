@@ -44,9 +44,9 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}/poi
     });
     logger.debug(`Added "Decrement /spirit/teams/documents/${teamId}.individualTotals.${entry.linkblue}" to batch`);
 
-    // Decrement /spirit/teams.points.{teamId}
+    // Decrement /spirit/teams.basicInfo.{teamId}.totalPoints
     const rootTeamsDoc = firestore.doc("/spirit/teams");
-    deletionBatch.update(rootTeamsDoc, new FieldPath("points", teamId), FieldValue.increment(-entry.points));
+    deletionBatch.update(rootTeamsDoc, new FieldPath("basicInfo", teamId, "totalPoints"), FieldValue.increment(-entry.points));
     logger.debug(`Added "Decrement /spirit/teams.points.${teamId}" to batch`);
 
     // Decrement /spirit/opportunities/documents/{opportunityId}.totalPoints
@@ -105,9 +105,9 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}/poi
     });
     logger.debug(`Added "Increment /spirit/teams/documents/${teamId}.individualTotals.${entry.linkblue}" to batch`);
 
-    // Increment /spirit/teams.points.{teamId}
+    // Increment /spirit/teams.basicInfo.{teamId}.totalPoints
     const rootTeamsDoc = firestore.doc("/spirit/teams");
-    creationBatch.update(rootTeamsDoc, new FieldPath("points", teamId), FieldValue.increment(entry.points));
+    creationBatch.update(rootTeamsDoc, new FieldPath("basicInfo", teamId, "totalPoints"), FieldValue.increment(entry.points));
     logger.debug(`Added "Increment /spirit/teams.points.${teamId}" to batch`);
 
     // Increment /spirit/opportunities/documents/{opportunityId}.totalPoints

@@ -17,8 +17,8 @@ export default functionsFirestore.document("/spirit/opportunities/documents/{opp
 
   const batch = getFirestore().batch();
   const basicInfoDoc = getFirestore().doc("/spirit/opportunities");
-  batch.set(basicInfoDoc, {[opportunityId]: { name, date }}, { merge: true });
-  logger.debug(`Added "Set /spirit/opportunities.${opportunityId}" to batch`);
+  batch.set(basicInfoDoc, {basicInfo: {[opportunityId]: { name, date }}}, { merge: true });
+  logger.debug(`Added "Set /spirit/opportunities.${opportunityId}.basicInfo" to batch`);
 
   try {
     logger.debug("Committing batch");
