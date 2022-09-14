@@ -63,14 +63,23 @@ export default functions.https.onCall(async (data: { accessToken: string, nonce?
   let profilePhoneNumber = profile.mobilePhone as string;
 
   if (profilePhoneNumber != null && typeof profilePhoneNumber === "string") {
-    userDocument.phoneNumber = profilePhoneNumber.replace(" ", "");
+    userDocument.phoneNumber = profilePhoneNumber;
   } else {
     const businessPhones = profile.businessPhones;
     if (businessPhones != null && Array.isArray(businessPhones) && businessPhones.length >= 1) {
       if (typeof businessPhones[0] === "string") {
         profilePhoneNumber = businessPhones[0];
-        userDocument.phoneNumber = profilePhoneNumber.replace(" ", "");
+        userDocument.phoneNumber = profilePhoneNumber;
       }
+    }
+  }
+
+  // Remove anything except for pluses and numbers from the phone number
+  if (userDocument.phoneNumber != null) {
+    userDocument.phoneNumber = userDocument.phoneNumber.replace(/[^\\+0-9]/g, "");
+
+    if(!(new RegExp("^\\+[1-9]\\d{1,14}$")).test(userDocument.phoneNumber)) {
+      delete userDocument.phoneNumber;
     }
   }
 
