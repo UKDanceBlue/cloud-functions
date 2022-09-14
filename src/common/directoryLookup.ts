@@ -56,7 +56,7 @@ export default async function directoryLookup(
 
   const firebaseFirestore = getFirestore();
 
-  const { lastAssociatedUid, upn, email, firstName, lastName } = queryData;
+  const { lastAssociatedUid, upn, email } = queryData;
   let foundDocuments = null;
 
   let lookupEmpty = true;
@@ -78,31 +78,9 @@ export default async function directoryLookup(
         lookupEmpty = lookup.empty;
       }
       if (!lookup || lookupEmpty) {
-        if (lastName) {
-          lookup = await firebaseFirestore
-            .collection("directory")
-            .where("lastName", "==", lastName)
-            .get();
-          lookupEmpty = lookup.empty;
-        }
-        if (!lookup || lookupEmpty) {
-          if (firstName) {
-            lookup = await firebaseFirestore
-              .collection("directory")
-              .where("firstName", "==", firstName)
-              .get();
-            lookupEmpty = lookup.empty;
-          }
-          if (!lookup || lookupEmpty) {
-            functions.logger.log("No documents found in the directory.");
-            lookupEmpty = true;
-            return null;
-          } else {
-            foundDocuments = lookup.docs;
-          }
-        } else {
-          foundDocuments = lookup.docs;
-        }
+        functions.logger.log("No documents found in the directory.");
+        lookupEmpty = true;
+        return null;
       } else {
         foundDocuments = lookup.docs;
       }
@@ -139,10 +117,10 @@ export default async function directoryLookup(
       functions.logger.log("Successfully found multiple directory entries, returning all.");
       return foundDocuments.map(
         (doc) =>
-          ({
-            directoryDocumentId: doc.id,
-            ...doc.data(),
-          } as DirectoryEntry)
+        ({
+          directoryDocumentId: doc.id,
+          ...doc.data(),
+        } as DirectoryEntry)
       );
     } else {
       functions.logger.log("Failed to narrow query to a single directory entry.");
