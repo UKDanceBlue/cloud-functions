@@ -8,7 +8,6 @@ import {
   DocumentData,
   Query,
   QueryDocumentSnapshot,
-  WriteResult,
   getFirestore,
 } from "firebase-admin/firestore";
 import * as functions from "firebase-functions";
@@ -19,52 +18,47 @@ export type SendPushNotificationArgument = {
   notificationBody?: string;
   notificationPayload?: unknown;
   // If this is going to specific users we get *notificationRecipients*, if many we get *notificationAudiences*.
-  notificationAudiences?: { [key: string]: string[] };
+  notificationAudiences?: Record<string, string[]>;
   notificationRecipients?: string[];
   sendToAll?: boolean;
+  dryRun?: boolean;
 };
 
+/**
+ * Sends a push notification to the specified recipients.
+ *
+ * If dryRun is true, the notification will not be sent to any recipients unless
+ * notificationRecipients is specified, in that case it will send a notification,
+ * but will not add any trace of that notification to firestore.
+ *
+ * notificationPayload is treated as an opaque object, and will be passed to the
+ * client as is.
+ *
+ * If notificationAudiences is specified, the notification will be sent to all
+ * users that match the specified audiences.
+ *
+ * If notificationRecipients is specified, the notification will be sent to all
+ * users that match the specified recipients (UIDs).
+ *
+ * If sendToAll is true, the notification will be sent to all possible users.
+ */
 export default functions
   .runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
   .https.onCall(async (data: SendPushNotificationArgument, context) => {
-    // Make sure the function is called while authenticated.
-    if (!context?.auth?.uid) {
-      throw new functions.https.HttpsError(
-        "unauthenticated",
-        "This function must be used while authenticated."
-      );
-    }
-
-    const {
-      token: { committee: senderCommittee, committeeRank: senderCommitteeRank },
-    } = context.auth;
-
-    // Make sure the user has the committeeRank claim.
-    if (typeof senderCommitteeRank !== "string") {
-      throw new functions.https.HttpsError(
-        "permission-denied",
-        "This user does not have the committeeRank claim."
-      );
-    }
-    if (
-      !(["advisor", "overall-chair", "chair"].includes(senderCommitteeRank)) &&
-      senderCommittee !== "tech-committee"
-    ) {
-      throw new functions.https.HttpsError(
-        "permission-denied",
-        "This function may only be used by a chair or a member of the tech committee."
-      );
-    }
+    verifyContext(context);
 
     const {
       notificationTitle,
       notificationBody,
       notificationPayload,
       // If this is going to specific users we get *notificationRecipients*, if many we get *notificationAudiences*, if we are sending to all devices (NOT LIMITED TO USERS) we get sendToAll
-      notificationAudiences,
+      notificationAudiences: notificationAudiencesRaw,
       notificationRecipients,
-      sendToAll
+      sendToAll,
+      dryRun
     } = data;
+
+    const notificationAudiences = notificationAudiencesRaw == null ? undefined : [notificationAudiencesRaw];
 
     if (!notificationTitle) {
       throw new functions.https.HttpsError("invalid-argument", "Notification title is required.");
@@ -74,15 +68,21 @@ export default functions
       throw new functions.https.HttpsError("invalid-argument", "Notification body is required.");
     }
 
-    // Make sure only one of notificationAudiences, notificationRecipients, or sendToAll is specified.
-    if ( notificationAudiences && notificationRecipients || notificationAudiences && sendToAll || notificationRecipients && sendToAll) {
+    // Make sure exactly one of notificationAudiences, notificationRecipients, or sendToAll is specified.
+    if ((+(notificationAudiences != null) + +(notificationRecipients != null) + +(sendToAll != null && sendToAll)) !== 1) {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Only one of notificationAudiences, notificationRecipients, or sendToAll is allowed."
+        "Exactly one of notificationAudiences, notificationRecipients, or sendToAll is allowed."
       );
     }
 
+    if (dryRun) {
+      functions.logger.info("Dry run requested, not sending any notifications (unless notificationRecipients is specified).");
+    }
+
     const firestore = getFirestore();
+    const writeBatch = firestore.batch();
+
     // Generate a notification ID and document.
     const notificationId = generateUuid();
     const notificationDocument = firestore.collection("past-notifications").doc(notificationId);
@@ -91,7 +91,7 @@ export default functions
       body: notificationBody,
       payload: notificationPayload,
     };
-    const notificationDocumentCreation = notificationDocument.create(notificationContent);
+    writeBatch.create(notificationDocument, notificationContent);
 
     // Create a new Expo SDK client
     const expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
@@ -99,57 +99,59 @@ export default functions
     const tokens: string[] = [];
 
     if (sendToAll) {
+      functions.logger.info("Sending to all users.");
+
       const deviceDocuments = await firestore.collection("devices").where("expoPushToken", "!=", null).get();
 
-      const addNotificationToUsers: Promise<WriteResult>[] = [];
-
-      // Make sure the notification's document has been created before we add a reference to it.
-      await notificationDocumentCreation;
-
+      const tokensToAdd: string[] = [];
       for (const deviceDocument of deviceDocuments.docs) {
         const device = deviceDocument.data() as { expoPushToken: string, latestUserId?: string | null };
-        tokens.push(device.expoPushToken);
+        tokensToAdd.push(device.expoPushToken);
 
         if (device.latestUserId != null) {
-          addNotificationToUsers.push(
-            firestore.collection(`users/${device.latestUserId}/notifications`).doc(notificationId).set({
-              ref: notificationDocument,
-            })
-          );
+          writeBatch.set(firestore.collection(`users/${device.latestUserId}/notifications`).doc(notificationId), {
+            ref: notificationDocument,
+          });
         }
       }
 
-      await Promise.all(addNotificationToUsers);
-    } else {
-      let userDocuments;
-
-      if (notificationAudiences) {
-        // Get the user documents for the notification.
-        userDocuments = await getUserDocumentsForNotification(notificationAudiences);
-      } else if (notificationRecipients && Array.isArray(notificationRecipients)) {
-        // Get the user documents for the notification.
-        userDocuments = await Promise.all(
-          notificationRecipients.map((recipient) =>
-            firestore.collection("users").doc(recipient).get()
-          )
-        );
-      }
+      tokens.push(...tokensToAdd);
+    } else if (notificationAudiences && Array.isArray(notificationAudiences)) {
+      // Get the user documents for the notification.
+      const userDocuments = await getUserDocumentsForNotification(notificationAudiences);
 
       if (!userDocuments || !Array.isArray(userDocuments)) {
         throw new functions.https.HttpsError("internal", "User document type assertion failed");
       }
 
-      // Make sure the notification's document has been created before we add a reference to it.
-      await notificationDocumentCreation;
+      // Add the reference to the notification to the user documents.
+      userDocuments.forEach((userDocument) =>
+        // Update the user document.
+        writeBatch.set(firestore.collection(`users/${userDocument.id}/notifications`).doc(notificationId), {
+          ref: notificationDocument,
+        })
+      );
+
+      userDocuments.forEach((userDocument) => {
+        const registeredPushTokens = userDocument.get("registeredPushTokens") as unknown;
+        if (Array.isArray(registeredPushTokens)) {
+          registeredPushTokens.forEach((token: string) => tokens.push(token));
+        }
+      });
+    } else if (notificationRecipients && Array.isArray(notificationRecipients)) {
+      // Get the user documents for the notification.
+      const userDocuments = await Promise.all(
+        notificationRecipients.map((recipient) =>
+          firestore.collection("users").doc(recipient).get()
+        )
+      );
 
       // Add the reference to the notification to the user documents.
-      await Promise.all(
-        userDocuments.map((userDocument) =>
-          // Update the user document.
-          firestore.collection(`users/${userDocument.id}/notifications`).doc(notificationId).set({
-            ref: notificationDocument,
-          })
-        )
+      userDocuments.forEach((userDocument) =>
+        // Update the user document.
+        writeBatch.set(firestore.collection(`users/${userDocument.id}/notifications`).doc(notificationId), {
+          ref: notificationDocument,
+        })
       );
 
       userDocuments.forEach((userDocument) => {
@@ -160,20 +162,63 @@ export default functions
       });
     }
 
-    const chunks = chunkNotification(notificationContent, tokens, expo);
+    if (!dryRun) {
+      try {
+        // Commit the write batch.
+        await writeBatch.commit();
+      } catch (error) {
+        functions.logger.error("Failed to commit write batch", error);
+        throw new functions.https.HttpsError("internal", "Failed to commit write batch");
+      }
+    }
 
-    return sendChunks(chunks, expo);
+    if (!dryRun || (dryRun && notificationRecipients && Array.isArray(notificationRecipients))) {
+      const chunks = chunkNotification(notificationContent, tokens, expo);
+
+      return sendChunks(chunks, expo);
+    } else {
+      return [];
+    }
   });
 
+function verifyContext(context: functions.https.CallableContext) {
+  // Make sure the function is called while authenticated.
+  if (!context?.auth?.uid) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "This function must be used while authenticated."
+    );
+  }
+
+  const {
+    token: { committee: senderCommittee, committeeRank: senderCommitteeRank },
+  } = context.auth;
+
+  // Make sure the user has the committeeRank claim.
+  if (typeof senderCommitteeRank !== "string") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "This user does not have the committeeRank claim."
+    );
+  }
+  if (!(
+    ["advisor", "overall-chair", "chair"].includes(senderCommitteeRank) ||
+    senderCommittee === "tech-committee"
+  )) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "This function may only be used by a chair or a member of the tech committee."
+    );
+  }
+}
+
 /**
- * Find users who should receive a notification.
- *
- * @param notificationAudiences The audiences to send the notification to.
- * @return The user documents of the users who should receive the notification.
- */
-async function getUserDocumentsForNotification(notificationAudiences: {
-  [key: string]: string[];
-}): Promise<QueryDocumentSnapshot<DocumentData>[]> {
+* Find users who should receive a notification.
+*
+* @param notificationAudiences The audiences to send the notification to.
+* @return The user documents of the users who should receive the notification.
+*/
+async function getUserDocumentsForNotification(notificationAudiences: Record<string, string[]>[]): Promise<QueryDocumentSnapshot<DocumentData>[]> {
   // Check number of audiences
   if (
     !(typeof notificationAudiences === "object" && Object.keys(notificationAudiences).length > 0)
@@ -193,23 +238,25 @@ async function getUserDocumentsForNotification(notificationAudiences: {
   // Get the firestore instance.
   const firestore = getFirestore();
 
-  let usersQuery: Query = firestore.collection("users");
+  const allUserDocsPromises: Promise<FirebaseFirestore.QuerySnapshot<DocumentData>>[] = [];
+  for (let i = 0; i < notificationAudiences.length; i++) {
+    let usersQuery: Query = firestore.collection("users");
 
-  const notificationAudiencesEntries = Object.entries(notificationAudiences);
-  for (const [audience, audienceValues] of notificationAudiencesEntries) {
-    usersQuery = usersQuery.where(`attributes.${audience}`, "in", audienceValues);
+    const notificationAudiencesEntries = Object.entries(notificationAudiences);
+    for (const [audience, audienceValues] of notificationAudiencesEntries) {
+      usersQuery = usersQuery.where(`attributes.${audience}`, "in", audienceValues);
+    }
 
+    allUserDocsPromises.push(usersQuery.get());
   }
-
-  const users = await usersQuery.get();
-  return users.docs;
+  return (await Promise.all(allUserDocsPromises)).flatMap((querySnapshot) => querySnapshot.docs);
 }
 
 /**
  * This function breaks the notification up into chunks and adds a to field with the push notifications from userDocuments.
  *
  * @param notificationContent The content of the notification.
- * @param userDocuments The user documents to send the notification to.
+ * @param tokens The push tokens to send the notification to.
  * @param expo The Expo SDK client.
  * @return The chunked notifications.
  */
