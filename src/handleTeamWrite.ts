@@ -8,6 +8,16 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}").o
     return;
   }
 
+  const batch = getFirestore().batch();
+
+  if (!change.before.exists) {
+    // New team
+    batch.update(change.after.ref, {
+      totalPoints: (change.after.get("totalPoints") as number | undefined) ?? 0,
+      teamClass: (change.after.get("teamClass") as string | undefined) ?? "public",
+    });
+  }
+
   if (!change.after.exists) {
     return getFirestore().collection("spirit").doc("teams").update({
       [`basicInfo.${teamId}`]: FieldValue.delete(),
@@ -15,19 +25,20 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}").o
       logger.error(error);
     });
   } else {
-
     const { name, teamClass, totalPoints } = change.after.data() ?? {};
-    if (typeof name !== "string" || typeof teamClass !== "string" || typeof totalPoints !== "number") {
-      return;
-    } else {
-      const batch = getFirestore().batch();
-      const basicInfoDoc = getFirestore().doc("/spirit/teams");
-      batch.update(basicInfoDoc, new FieldPath("basicInfo", teamId), {
-        name,
-        teamClass,
-        totalPoints,
-      });
-      await batch.commit();
+    const docData: { name?: string, teamClass?: string, totalPoints?: number } = {};
+    if (typeof name === "string") {
+      docData.name = name;
     }
+    if (typeof teamClass === "string") {
+      docData.teamClass = teamClass;
+    }
+    if (typeof totalPoints === "number") {
+      docData.totalPoints = totalPoints;
+    }
+    const basicInfoDoc = getFirestore().doc("/spirit/teams");
+    batch.update(basicInfoDoc, new FieldPath("basicInfo", teamId), docData);
   }
+
+  await batch.commit();
 });
