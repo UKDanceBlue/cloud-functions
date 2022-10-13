@@ -119,11 +119,11 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}/poi
 
     if (entry.linkblue == null) {
       logger.debug("Setting linkblue of entry to '%TEAM%'")
-    }
 
-    return change.after.ref.set({
-      linkblue: entry.linkblue ?? "%TEAM%",
-    }, { merge: true });
+      return change.after.ref.set({
+        linkblue: entry.linkblue ?? "%TEAM%",
+      }, { merge: true });
+    }
   } else {
     try {
       logger.debug("Committing write batch");
