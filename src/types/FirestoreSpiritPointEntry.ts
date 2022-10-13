@@ -2,7 +2,7 @@ export interface SpiritPointEntry {
   points: number;
   teamId: string;
   opportunityId: string;
-  linkblue: string;
+  linkblue?: string | "%TEAM%";
   displayName?: string;
 }
 
@@ -25,7 +25,7 @@ export function isSpiritPointEntry(
     return false;
   }
 
-  if (typeof (data as SpiritPointEntry).linkblue !== "string") {
+  if ((data as SpiritPointEntry).linkblue != null && typeof (data as SpiritPointEntry).linkblue !== "string") {
     return false;
   }
 
