@@ -109,16 +109,29 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}/poi
     });
     logger.debug("Added \"Increment /spirit/info.totalPoints\" to batch");
 
+    try {
+      logger.debug("Committing write batch");
+      await writeBatch.commit();
+      logger.debug("Write batch committed");
+    } catch (error) {
+      logger.error(error);
+    }
+
+    if (entry.linkblue == null) {
+      logger.debug("Setting linkblue of entry to '%TEAM%'")
+    }
+
     return change.after.ref.set({
       linkblue: entry.linkblue ?? "%TEAM%",
     }, { merge: true });
+  } else {
+    try {
+      logger.debug("Committing write batch");
+      await writeBatch.commit();
+      logger.debug("Write batch committed");
+    } catch (error) {
+      logger.error(error);
+    }
   }
 
-  try {
-    logger.debug("Committing write batch");
-    await writeBatch.commit();
-    logger.debug("Write batch committed");
-  } catch (error) {
-    logger.error(error);
-  }
 });
