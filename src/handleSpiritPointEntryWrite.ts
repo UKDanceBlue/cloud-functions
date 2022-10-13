@@ -17,15 +17,14 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}/poi
 
     const entry = change.before.data();
 
-    if (entry == null || entry.opportunityId == null) {
-      logger.log("Entry or entry.opportunityId was nullish, aborting");
-      return;
-    }
-
     // Verify the document's structure
     if (!isSpiritPointEntry(entry)) {
       logger.log("Entry was not a valid SpiritPointEntry, aborting");
-      return;
+      if (change.after.exists) {
+        return change.after.ref.delete();
+      } else {
+        return;
+      }
     }
 
     // Delete /spirit/opportunities/documents/{opportunityId}/pointEntries/{entryId}
@@ -77,11 +76,6 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}/poi
     logger.debug(`Detected create event for teamId: ${teamId}`);
 
     const entry = change.after.data();
-
-    if (entry == null || entry.opportunityId == null) {
-      logger.log("Entry or entry.opportunityId is nullish, aborting");
-      return;
-    }
 
     // Verify the document's structure
     if (!isSpiritPointEntry(entry)) {
