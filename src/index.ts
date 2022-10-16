@@ -5,6 +5,7 @@ import generateCustomTokenFunction from "./generateCustomToken.js";
 import handleDeviceDocumentWriteFunction from "./handleDeviceDocumentWrite.js";
 import handleOpportunityWriteFunction from "./handleOpportunityWrite.js";
 import handleSpiritPointEntryWriteFunction from "./handleSpiritPointEntryWrite.js";
+import handleTeamWriteFunction from "./handleTeamWrite.js";
 import processPushNotificationReceiptsFunction, {
   ProcessPushNotificationReceiptsArgument,
 } from "./processPushNotificationReceipts.js";
@@ -33,3 +34,5 @@ export const generateCustomToken = generateCustomTokenFunction;
 export const handleSpiritPointEntryWrite = handleSpiritPointEntryWriteFunction;
 
 export const handleOpportunityWrite = handleOpportunityWriteFunction;
+
+export const handleTeamWrite = handleTeamWriteFunction;

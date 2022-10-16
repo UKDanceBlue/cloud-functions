@@ -1,4 +1,4 @@
-import { FieldPath, FieldValue, getFirestore, } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, } from "firebase-admin/firestore";
 import { firestore as functionsFirestore, logger } from "firebase-functions";
 
 import { isSpiritPointEntry } from "./types/FirestoreSpiritPointEntry.js";
@@ -44,9 +44,10 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}/poi
     logger.debug(`Added "Decrement /spirit/teams/documents/${teamId}.individualTotals.${entry.linkblue ?? "%TEAM%"}" to batch`);
 
     // Decrement /spirit/teams.basicInfo.{teamId}.totalPoints
-    const rootTeamsDoc = firestore.doc("/spirit/teams");
-    writeBatch.update(rootTeamsDoc, new FieldPath("basicInfo", teamId, "totalPoints"), FieldValue.increment(-entry.points));
-    logger.debug(`Added "Decrement /spirit/teams.points.${teamId}" to batch`);
+    // const rootTeamsDoc = firestore.doc("/spirit/teams");
+    // writeBatch.update(rootTeamsDoc, new FieldPath("basicInfo", teamId, "totalPoints"), FieldValue.increment(-entry.points));
+    // logger.debug(`Added "Decrement /spirit/teams.points.${teamId}" to batch`);
+    // THIS IS HANDLED IN handleTeamWrite.ts
 
     // Decrement /spirit/opportunities/documents/{opportunityId}.totalPoints
     const opportunityInfoDocument = firestore.doc(`/spirit/opportunities/documents/${entry.opportunityId}`);
@@ -91,9 +92,10 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}/poi
     logger.debug(`Added "Increment /spirit/teams/documents/${teamId}.individualTotals.${entry.linkblue ?? "%TEAM%"}" to batch`);
 
     // Increment /spirit/teams.basicInfo.{teamId}.totalPoints
-    const rootTeamsDoc = firestore.doc("/spirit/teams");
-    writeBatch.update(rootTeamsDoc, new FieldPath("basicInfo", teamId, "totalPoints"), FieldValue.increment(entry.points));
-    logger.debug(`Added "Increment /spirit/teams.points.${teamId}" to batch`);
+    // const rootTeamsDoc = firestore.doc("/spirit/teams");
+    // writeBatch.update(rootTeamsDoc, new FieldPath("basicInfo", teamId, "totalPoints"), FieldValue.increment(entry.points));
+    // logger.debug(`Added "Increment /spirit/teams.points.${teamId}" to batch`);
+    // THIS IS HANDLED IN handleTeamWrite.ts
 
     // Increment /spirit/opportunities/documents/{opportunityId}.totalPoints
     const opportunityInfoDocument = firestore.doc(`/spirit/opportunities/documents/${entry.opportunityId}`);

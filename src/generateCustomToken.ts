@@ -1,11 +1,21 @@
 import { UpdateRequest, getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { DocumentReference, FieldPath, getFirestore } from "firebase-admin/firestore";
 import * as functions from "firebase-functions";
 import { decode } from "jsonwebtoken";
 import fetch from "node-fetch";
 import { v4 } from "uuid";
 
 import directoryLookup from "./common/directoryLookup.js"
+
+interface FirestoreUser {
+  attributes: Record<string, string>;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber?: string;
+  linkblue?: string | null;
+  team?: DocumentReference | null;
+}
 
 export default functions.https.onCall(async (data: { accessToken: string, nonce?: string }) => {
   if (data == null) {
@@ -44,11 +54,13 @@ export default functions.https.onCall(async (data: { accessToken: string, nonce?
     family_name: lastName
   }: Record<string, string> = decodedAccessToken.payload;
 
-  const userDocument = {
+  const userDocument: FirestoreUser = {
     firstName,
     lastName,
-    linkblue: upn.split("@")[0]
-  } as Record<string, string>;
+    linkblue: upn.split("@")[0],
+    email: upn,
+    attributes: {},
+  };
 
   const profile = await (await fetch("https://graph.microsoft.com/v1.0/me/", { headers: { "Authorization": `Bearer ${accessToken}` } })).json() as Record<string, unknown>;
 
@@ -78,12 +90,12 @@ export default functions.https.onCall(async (data: { accessToken: string, nonce?
   if (userDocument.phoneNumber != null) {
     userDocument.phoneNumber = userDocument.phoneNumber.replace(/[^\\+0-9]/g, "");
 
-    if(!(new RegExp("^\\+[1-9]\\d{1,14}$")).test(userDocument.phoneNumber)) {
+    if (!(new RegExp("^\\+[1-9]\\d{1,14}$")).test(userDocument.phoneNumber)) {
       delete userDocument.phoneNumber;
     }
   }
 
-  const directoryEntry = await directoryLookup({ upn, firstName, lastName, email: (profileEmail as string) ?? undefined });
+  const directoryEntry = await directoryLookup({ upn, firstName, lastName, email: userDocument.email });
 
   if (directoryEntry != null && !Array.isArray(directoryEntry)) {
     if (directoryEntry.committee != null) {
@@ -114,18 +126,44 @@ export default functions.https.onCall(async (data: { accessToken: string, nonce?
     displayName: `${firstName} ${lastName}`
   }
 
-  if(userDocument.email != null) {
+  if (userDocument.email != null) {
     userData.email = userDocument.email;
+    userData.emailVerified = true;
   }
 
-  if(userDocument.phoneNumber != null) {
+  if (userDocument.phoneNumber != null) {
     userData.phoneNumber = userDocument.phoneNumber;
+  }
+
+  if (typeof userDocument.linkblue === "string") {
+    const rootTeamDoc = getFirestore().doc("/spirit/teams");
+    const rootTeamDocSnapshot = await rootTeamDoc.get();
+    if (rootTeamDocSnapshot.exists) {
+      const membershipInfo = rootTeamDocSnapshot.get(new FieldPath("membershipInfo", userDocument.linkblue)) as { teamId?: string, isCaptain?: boolean } | undefined;
+      if (membershipInfo != null && typeof membershipInfo.teamId === "string") {
+        const teamDoc = getFirestore().doc(`/spirit/teams/documents/${membershipInfo.teamId}`);
+
+        await teamDoc.update(`memberAccounts.${userDocument.linkblue}`, uid);
+        await teamDoc.update(`memberNames.${userDocument.linkblue}`, `${firstName} ${lastName}`);
+
+        userDocument.team = teamDoc;
+        customClaims.spiritTeamId = membershipInfo.teamId;
+        if (membershipInfo.isCaptain === true) {
+          customClaims.spiritCaptain = true;
+        }
+      }
+    }
   }
 
   const auth = getAuth();
 
-  if((await auth.getUsers([{uid}])).users.length === 0) {
-    await auth.createUser({uid, displayName: `${firstName} ${lastName}`, email: userDocument.email, phoneNumber: userDocument.phoneNumber, emailVerified: true});
+  const existingUsersCount = (await auth.getUsers([{ uid }])).users.length;
+  if (existingUsersCount === 0) {
+    await auth.createUser({ uid, ...userData, multiFactor: undefined });
+  } else if (existingUsersCount === 1) {
+    await auth.updateUser(uid, userData);
+  } else {
+    throw new Error("Multiple users with the same uid (this is an invariant violation and should be impossible)");
   }
 
   const customToken = await auth.createCustomToken(uid, customClaims);

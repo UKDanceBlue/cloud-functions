@@ -25,19 +25,41 @@ export default functionsFirestore.document("/spirit/teams/documents/{teamId}").o
       logger.error(error);
     });
   } else {
-    const { name, teamClass, totalPoints } = change.after.data() ?? {};
-    const docData: { name?: string, teamClass?: string, totalPoints?: number } = {};
+    const { name, teamClass, totalPoints, members, captains } = change.after.data() ?? {};
+    const { members: existingMembers } = change.before.data() ?? {};
+
+    const basicInfo: { name?: string, teamClass?: string, totalPoints?: number } = {};
+
     if (typeof name === "string") {
-      docData.name = name;
+      basicInfo.name = name;
     }
     if (typeof teamClass === "string") {
-      docData.teamClass = teamClass;
+      basicInfo.teamClass = teamClass;
     }
     if (typeof totalPoints === "number") {
-      docData.totalPoints = totalPoints;
+      basicInfo.totalPoints = totalPoints;
     }
-    const basicInfoDoc = getFirestore().doc("/spirit/teams");
-    batch.update(basicInfoDoc, new FieldPath("basicInfo", teamId), docData);
+    const rootTeamDoc = getFirestore().doc("/spirit/teams");
+    batch.update(rootTeamDoc, new FieldPath("basicInfo", teamId), basicInfo);
+
+    const checkCaptains = Array.isArray(captains);
+    if (Array.isArray(members)) {
+      for (const member of members) {
+        if (typeof member === "string") {
+          batch.update(rootTeamDoc, new FieldPath("membershipInfo", member), {
+            teamId,
+            isCaptain: checkCaptains && captains.includes(member),
+          });
+        }
+      }
+      if (Array.isArray(existingMembers)) {
+        for (const member of existingMembers) {
+          if (!members.includes(member) && typeof member === "string") {
+            batch.update(rootTeamDoc, new FieldPath("membershipInfo", member), FieldValue.delete());
+          }
+        }
+      }
+    }
   }
 
   await batch.commit();
