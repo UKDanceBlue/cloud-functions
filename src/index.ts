@@ -6,6 +6,7 @@ import handleDeviceDocumentWriteFunction from "./handleDeviceDocumentWrite.js";
 import handleOpportunityWriteFunction from "./handleOpportunityWrite.js";
 import handleSpiritPointEntryWriteFunction from "./handleSpiritPointEntryWrite.js";
 import handleTeamWriteFunction from "./handleTeamWrite.js";
+import makeRequestFunction from "./makeRequest.js";
 import processPushNotificationReceiptsFunction, {
   ProcessPushNotificationReceiptsArgument,
 } from "./processPushNotificationReceipts.js";
@@ -36,3 +37,5 @@ export const handleSpiritPointEntryWrite = handleSpiritPointEntryWriteFunction;
 export const handleOpportunityWrite = handleOpportunityWriteFunction;
 
 export const handleTeamWrite = handleTeamWriteFunction;
+
+export const makeRequest = makeRequestFunction;
