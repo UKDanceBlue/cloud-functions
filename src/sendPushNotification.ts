@@ -11,7 +11,7 @@ import {
   QueryDocumentSnapshot,
   getFirestore,
 } from "firebase-admin/firestore";
-import * as functions from "firebase-functions";
+import { https, logger, runWith } from "firebase-functions";
 import { v4 as generateUuid } from "uuid";
 
 export type SendPushNotificationArgument = {
@@ -19,7 +19,7 @@ export type SendPushNotificationArgument = {
   notificationBody?: string;
   notificationPayload?: unknown;
   // If this is going to specific users we get *notificationRecipients*, if many we get *notificationAudiences*.
-  notificationAudiences?: Record<string, string[]>;
+  notificationAudiences?: Record<string, (string | boolean | number)[]>;
   notificationRecipients?: string[];
   sendToAll?: boolean;
   dryRun?: boolean;
@@ -43,12 +43,11 @@ export type SendPushNotificationArgument = {
  *
  * If sendToAll is true, the notification will be sent to all possible users.
  */
-export default functions
-  .runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
+export default runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
   .https.onCall(async (data: SendPushNotificationArgument, context) => {
-    functions.logger.debug("'sendPushNotification' called");
+    logger.debug("'sendPushNotification' called");
     verifyContext(context);
-    functions.logger.debug("'sendPushNotification' verified context");
+    logger.debug("'sendPushNotification' verified context");
 
     const {
       notificationTitle,
@@ -61,16 +60,16 @@ export default functions
       dryRun
     } = data;
 
-    functions.logger.debug("Checking validity of arguments");
+    logger.debug("Checking validity of arguments");
 
     const notificationAudiences = notificationAudiencesRaw == null ? undefined : [notificationAudiencesRaw];
 
     if (!notificationTitle || typeof notificationTitle !== "string") {
-      throw new functions.https.HttpsError("invalid-argument", "Notification title is required and must be a string.");
+      throw new https.HttpsError("invalid-argument", "Notification title is required and must be a string.");
     }
 
     if (!notificationBody || typeof notificationBody !== "string") {
-      throw new functions.https.HttpsError("invalid-argument", "Notification body is required and must be a string.");
+      throw new https.HttpsError("invalid-argument", "Notification body is required and must be a string.");
     }
 
     // Make sure exactly one of notificationAudiences, notificationRecipients, or sendToAll is specified and that it is valid.
@@ -78,18 +77,18 @@ export default functions
       // notificationAudiences should be pretty small so we should be able to iterate over it
       for (const audience of notificationAudiences) {
         if (typeof audience !== "object") {
-          throw new functions.https.HttpsError("invalid-argument", "Notification audiences must be an object.");
+          throw new https.HttpsError("invalid-argument", "Notification audiences must be an object.");
         } else {
           for (const [audienceName, audienceValues] of Object.entries(audience)) {
             if (typeof audienceName !== "string") {
-              throw new functions.https.HttpsError("invalid-argument", `Notification audience names must be strings (${String(audienceName as unknown)})`);
+              throw new https.HttpsError("invalid-argument", `Notification audience names must be strings (${String(audienceName as unknown)})`);
             }
             if (!Array.isArray(audienceValues)) {
-              throw new functions.https.HttpsError("invalid-argument", `Notification audience values must be arrays of strings (${String(audienceName as unknown)}: ${JSON.stringify(audienceValues as unknown)})`);
+              throw new https.HttpsError("invalid-argument", `Notification audience values must be arrays of strings (${String(audienceName as unknown)}: ${JSON.stringify(audienceValues as unknown)})`);
             }
             for (const audienceValue of audienceValues) {
-              if (typeof audienceValue !== "string") {
-                throw new functions.https.HttpsError("invalid-argument", `Notification audience values must be strings (${String(audienceName as unknown)}: ${String(audienceValue)})`);
+              if (typeof audienceValue !== "string" && typeof audienceValue !== "boolean" && typeof audienceValue !== "number") {
+                throw new https.HttpsError("invalid-argument", `Notification audience values must be strings, booleans, or numbers (${String(audienceName as unknown)}: ${String(audienceValue)})`);
               }
             }
           }
@@ -99,25 +98,25 @@ export default functions
     else if (notificationAudiences == null && notificationRecipients != null && (sendToAll == null || sendToAll === false)) {
       // This might be longer though, so we just check that it is an array
       if (!Array.isArray(notificationRecipients)) {
-        throw new functions.https.HttpsError("invalid-argument", "Notification recipients must be an array.");
+        throw new https.HttpsError("invalid-argument", "Notification recipients must be an array.");
       }
     }
     else if (notificationAudiences == null && notificationRecipients == null && sendToAll != null) {
       if (typeof sendToAll !== "boolean") {
-        throw new functions.https.HttpsError("invalid-argument", "Send to all must be a boolean.");
+        throw new https.HttpsError("invalid-argument", "Send to all must be a boolean.");
       }
     }
     else {
-      throw new functions.https.HttpsError(
+      throw new https.HttpsError(
         "invalid-argument",
         "Exactly one of notificationAudiences, notificationRecipients, or sendToAll is allowed."
       );
     }
 
-    functions.logger.debug("Arguments are valid");
+    logger.debug("Arguments are valid");
 
     if (dryRun) {
-      functions.logger.info("Dry run requested, not sending any notifications (unless notificationRecipients is specified).");
+      logger.info("Dry run requested, not sending any notifications (unless notificationRecipients is specified).");
     }
 
     const firestore = getFirestore();
@@ -126,7 +125,7 @@ export default functions
     // Generate a notification ID and document.
     const notificationId = generateUuid();
 
-    functions.logger.debug(`Using notification ID: ${notificationId}`);
+    logger.debug(`Using notification ID: ${notificationId}`);
 
     const notificationDocument = firestore.collection("past-notifications").doc(notificationId);
     const notificationContent = {
@@ -142,11 +141,11 @@ export default functions
     const tokens: string[] = [];
 
     if (sendToAll) {
-      functions.logger.info("Sending to all users.");
+      logger.info("Sending to all users.");
 
       const deviceDocuments = await firestore.collection("devices").where("expoPushToken", "!=", null).get();
 
-      functions.logger.debug(`Found ${deviceDocuments.size} devices with 'expoPushToken' set.`);
+      logger.debug(`Found ${deviceDocuments.size} devices with 'expoPushToken' set.`);
 
       const tokensToAdd: string[] = [];
       for (const deviceDocument of deviceDocuments.docs) {
@@ -162,19 +161,19 @@ export default functions
         }
       }
 
-      functions.logger.debug(`Adding ${tokensToAdd.length} tokens to the list of tokens to send to.`);
+      logger.debug(`Adding ${tokensToAdd.length} tokens to the list of tokens to send to.`);
 
       tokens.push(...tokensToAdd);
     } else if (notificationAudiences && Array.isArray(notificationAudiences)) {
-      functions.logger.debug("Sending to audiences.");
+      logger.debug("Sending to audiences.");
 
       // Get the user documents for the notification.
       const userDocuments = await getUserDocumentsForNotification(notificationAudiences);
 
-      functions.logger.debug(`Found ${userDocuments.length} users that match the specified audiences.`);
+      logger.debug(`Found ${userDocuments.length} users that match the specified audiences.`);
 
       if (!userDocuments || !Array.isArray(userDocuments)) {
-        throw new functions.https.HttpsError("internal", "User document type assertion failed");
+        throw new https.HttpsError("internal", "User document type assertion failed");
       }
 
       // Add the reference to the notification to the user documents.
@@ -185,7 +184,7 @@ export default functions
         })
       );
 
-      functions.logger.debug("Adding users' tokens to the list of tokens to send to.");
+      logger.debug("Adding users' tokens to the list of tokens to send to.");
 
       userDocuments.forEach((userDocument) => {
         const registeredPushTokens = userDocument.get("registeredPushTokens") as unknown;
@@ -194,20 +193,20 @@ export default functions
         }
       });
     } else if (notificationRecipients && Array.isArray(notificationRecipients)) {
-      functions.logger.debug("Sending to specified recipients.");
+      logger.debug("Sending to specified recipients.");
 
       // Get the user documents for the notification.
       const userDocuments = await Promise.all(
         notificationRecipients.map((recipient) => {
           if (typeof recipient !== "string") {
-            throw new functions.https.HttpsError("invalid-argument", `Notification recipients must be strings (${String(recipient)})`);
+            throw new https.HttpsError("invalid-argument", `Notification recipients must be strings (${String(recipient)})`);
           }
           return firestore.collection("users").doc(recipient).get()
         }
         )
       );
 
-      functions.logger.debug(`Found ${userDocuments.length} users that match the specified recipients.`);
+      logger.debug(`Found ${userDocuments.length} users that match the specified recipients.`);
 
       // Add the reference to the notification to the user documents.
       userDocuments.forEach((userDocument) =>
@@ -217,7 +216,7 @@ export default functions
         })
       );
 
-      functions.logger.debug("Adding users' tokens to the list of tokens to send to.");
+      logger.debug("Adding users' tokens to the list of tokens to send to.");
 
       userDocuments.forEach((userDocument) => {
         const registeredPushTokens = userDocument.get("registeredPushTokens") as unknown;
@@ -228,34 +227,34 @@ export default functions
     }
 
     if (!dryRun) {
-      functions.logger.debug("Adding notifications to firestore.");
+      logger.debug("Adding notifications to firestore.");
       try {
         // Commit the write batch.
         await writeBatch.commit();
-        functions.logger.debug("Write batch committed.");
+        logger.debug("Write batch committed.");
       } catch (error) {
-        functions.logger.error("Failed to commit write batch", error);
-        throw new functions.https.HttpsError("internal", "Failed to commit write batch");
+        logger.error("Failed to commit write batch", error);
+        throw new https.HttpsError("internal", "Failed to commit write batch");
       }
     } else {
-      functions.logger.debug("Dry run requested, not committing write batch.");
+      logger.debug("Dry run requested, not committing write batch.");
     }
 
     if (!dryRun || (dryRun && notificationRecipients && Array.isArray(notificationRecipients))) {
-      functions.logger.debug("Sending notifications to Expo.");
+      logger.debug("Sending notifications to Expo.");
       const chunks = chunkNotification(notificationContent, tokens, expo);
 
       return sendChunks(chunks, expo);
     } else {
-      functions.logger.info("Dry run requested, not sending any notifications.");
+      logger.info("Dry run requested, not sending any notifications.");
       return [];
     }
   });
 
-function verifyContext(context: functions.https.CallableContext) {
+function verifyContext(context: https.CallableContext) {
   // Make sure the function is called while authenticated.
   if (!context?.auth?.uid) {
-    throw new functions.https.HttpsError(
+    throw new https.HttpsError(
       "unauthenticated",
       "This function must be used while authenticated."
     );
@@ -267,7 +266,7 @@ function verifyContext(context: functions.https.CallableContext) {
 
   // Make sure the user has the committeeRank claim.
   if (typeof senderCommitteeRank !== "string") {
-    throw new functions.https.HttpsError(
+    throw new https.HttpsError(
       "permission-denied",
       "This user does not have the committeeRank claim."
     );
@@ -276,7 +275,7 @@ function verifyContext(context: functions.https.CallableContext) {
     ["advisor", "overall-chair", "chair"].includes(senderCommitteeRank) ||
     senderCommittee === "tech-committee"
   )) {
-    throw new functions.https.HttpsError(
+    throw new https.HttpsError(
       "permission-denied",
       "This function may only be used by a chair or a member of the tech committee."
     );
@@ -293,18 +292,18 @@ function verifyContext(context: functions.https.CallableContext) {
 * @param notificationAudiences The audiences to send the notification to.
 * @return The user documents of the users who should receive the notification.
 */
-async function getUserDocumentsForNotification(notificationAudiences: Record<string, string[]>[]): Promise<QueryDocumentSnapshot<DocumentData>[]> {
+async function getUserDocumentsForNotification(notificationAudiences: Record<string, (string | boolean | number)[]>[]): Promise<QueryDocumentSnapshot<DocumentData>[]> {
   // Check number of audiences
   if (
     !(typeof notificationAudiences === "object" && Object.keys(notificationAudiences).length > 0)
   ) {
-    throw new functions.https.HttpsError(
+    throw new https.HttpsError(
       "invalid-argument",
       "At least one audience parameter must be specified."
     );
   }
   if (Object.keys(notificationAudiences).length > 10) {
-    throw new functions.https.HttpsError(
+    throw new https.HttpsError(
       "invalid-argument",
       "Specify fewer than 10 audience parameters."
     );
@@ -315,19 +314,19 @@ async function getUserDocumentsForNotification(notificationAudiences: Record<str
 
   const allUserDocsPromises: Promise<FirebaseFirestore.QuerySnapshot<DocumentData>["docs"]>[] = [];
   for (let i = 0; i < notificationAudiences.length; i++) {
-    functions.logger.debug(`Making filter for audience ${i + 1}.`);
+    logger.debug(`Making filter for audience ${i + 1}.`);
 
     let usersQuery: Query = firestore.collection("users");
 
     const queriesToProcess = Object.entries(notificationAudiences[i]);
 
-    functions.logger.debug(`Found ${queriesToProcess.length} queries to process.`);
+    logger.debug(`Found ${queriesToProcess.length} queries to process.`);
 
     const processedQueries: string[] = [];
     for (let j = 0; j < queriesToProcess.length; j++) {
       const [field, allowedValues] = queriesToProcess[j];
       if (allowedValues.length === 1) {
-        functions.logger.debug(`Using == query for ${field} because there is only one value.`);
+        logger.debug(`Using == query for ${field} because there is only one value.`);
         usersQuery = usersQuery.where(new FieldPath("attributes", field), "==", allowedValues[0]);
         processedQueries.push(field);
       }
@@ -345,14 +344,15 @@ async function getUserDocumentsForNotification(notificationAudiences: Record<str
     for (let j = 0; j < audiencesBySpecificity.length; j++) {
       const field = audiencesBySpecificity[j];
       if (field in notificationAudiences[i] && !processedQueries.includes(field)) {
-        functions.logger.debug(`Using in query for ${field} because it is the most specific.`);
+        logger.debug(`Using in query for ${field} because it is the most specific.`);
         usersQuery = usersQuery.where(new FieldPath("attributes", field), "in", notificationAudiences[i][field]);
         processedQueries.push(field);
+        break;
       }
     }
 
     if (processedQueries.length < queriesToProcess.length) {
-      functions.logger.debug("There are still queries to process, will filter in code.");
+      logger.debug("There are still queries to process, will filter in code.");
 
       allUserDocsPromises.push(usersQuery.get().then((querySnapshot) => querySnapshot.docs.filter((doc) => {
         for (let j = 0; j < queriesToProcess.length; j++) {
@@ -364,7 +364,7 @@ async function getUserDocumentsForNotification(notificationAudiences: Record<str
         return true;
       })));
     } else {
-      functions.logger.debug("All queries were included in the in query, using returned docs directly.");
+      logger.debug("All queries were included in the in query, using returned docs directly.");
       allUserDocsPromises.push(usersQuery.get().then((querySnapshot) => querySnapshot.docs));
     }
   }
@@ -390,7 +390,7 @@ function chunkNotification(
     // Each push token should look like "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"
     if (!Expo.isExpoPushToken(pushToken)) {
       // TODO remove the token when this happens
-      functions.logger.error(`Push token ${pushToken as string} is not a valid Expo push token`);
+      logger.error(`Push token ${pushToken as string} is not a valid Expo push token`);
     } else {
       // Construct a message (see https://docs.expo.io/push-notifications/sending-notifications/)
       messages.push({ to: pushToken, ...notificationContent });
@@ -426,7 +426,7 @@ async function sendChunks(
       const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
       ticketChunks.push(ticketChunk);
     } catch (error) {
-      throw new functions.https.HttpsError(
+      throw new https.HttpsError(
         "internal",
         `There was an error sending a push notification: ${JSON.stringify(error)}`,
         chunk
