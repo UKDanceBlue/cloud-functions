@@ -9,5 +9,10 @@ export default https.onCall(async (data: {
     throw new https.HttpsError("unauthenticated", "The function must be called while authenticated.");
   }
 
-  return fetch(data.url, data.options);
+  try {
+    const res = await fetch(data.url, data.options);
+    return await res.json();
+  } catch (err) {
+    throw new https.HttpsError("internal", String((err as Error).message), err);
+  }
 });
