@@ -6,7 +6,9 @@ import {
 } from "expo-server-sdk";
 import {
   DocumentData,
+  DocumentReference,
   FieldPath,
+  FieldValue,
   Query,
   QueryDocumentSnapshot,
   getFirestore,
@@ -127,20 +129,24 @@ export default runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
 
     logger.debug(`Using notification ID: ${notificationId}`);
 
-    const notificationDocument = firestore.collection("past-notifications").doc(notificationId);
     const notificationContent = {
       title: notificationTitle,
       body: notificationBody,
       payload: notificationPayload,
     };
-    writeBatch.create(notificationDocument, notificationContent);
 
     // Create a new Expo SDK client
     const expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
 
     const tokens: string[] = [];
 
+    // [user reference, notification reference]
+    const userDocumentsAndReferences: [DocumentReference, DocumentReference][] = [];
+
     if (sendToAll) {
+      const notificationDocument = firestore.collection("past-notifications").doc(notificationId);
+      writeBatch.create(notificationDocument, notificationContent);
+
       logger.info("Sending to all users.");
 
       const deviceDocuments = await firestore.collection("devices").where("expoPushToken", "!=", null).get();
@@ -155,9 +161,7 @@ export default runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
         }
 
         if (device.latestUserId != null && typeof device.latestUserId === "string") {
-          writeBatch.set(firestore.collection(`users/${device.latestUserId}/notifications`).doc(notificationId), {
-            ref: notificationDocument,
-          });
+          userDocumentsAndReferences.push([firestore.collection("users").doc(device.latestUserId), notificationDocument]);
         }
       }
 
@@ -165,6 +169,9 @@ export default runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
 
       tokens.push(...tokensToAdd);
     } else if (notificationAudiences && Array.isArray(notificationAudiences)) {
+
+      const notificationDocument = firestore.collection("past-notifications").doc(notificationId);
+      writeBatch.create(notificationDocument, notificationContent);
       logger.debug("Sending to audiences.");
 
       // Get the user documents for the notification.
@@ -177,12 +184,9 @@ export default runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
       }
 
       // Add the reference to the notification to the user documents.
-      userDocuments.forEach((userDocument) =>
-        // Update the user document.
-        writeBatch.set(firestore.collection(`users/${userDocument.id}/notifications`).doc(notificationId), {
-          ref: notificationDocument,
-        })
-      );
+      userDocuments.forEach((userDocument) => {
+        userDocumentsAndReferences.push([userDocument.ref, notificationDocument]);
+      });
 
       logger.debug("Adding users' tokens to the list of tokens to send to.");
 
@@ -209,12 +213,12 @@ export default runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
       logger.debug(`Found ${userDocuments.length} users that match the specified recipients.`);
 
       // Add the reference to the notification to the user documents.
-      userDocuments.forEach((userDocument) =>
-        // Update the user document.
-        writeBatch.set(firestore.collection(`users/${userDocument.id}/notifications`).doc(notificationId), {
-          ref: notificationDocument,
-        })
-      );
+      userDocuments.forEach((userDocument) => {
+        const notificationDocument = userDocument.ref.collection("past-notifications").doc(notificationId);
+        // Create the user's notification document.
+        writeBatch.create(notificationDocument, notificationContent);
+        userDocumentsAndReferences.push([userDocument.ref, notificationDocument]);
+      });
 
       logger.debug("Adding users' tokens to the list of tokens to send to.");
 
@@ -231,7 +235,15 @@ export default runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
       try {
         // Commit the write batch.
         await writeBatch.commit();
-        logger.debug("Write batch committed.");
+        logger.debug("Write batch committed. Adding notifications to users non-transactionally.");
+        const promises = userDocumentsAndReferences.map(([userDocument, notificationDocument]) => {
+          return userDocument.update({
+            notificationReferences: FieldValue.arrayUnion(notificationDocument),
+          }).catch((error) => {
+            logger.error("Error adding notification reference to user document", error);
+          });
+        });
+        await Promise.allSettled(promises);
       } catch (error) {
         logger.error("Failed to commit write batch", error);
         throw new https.HttpsError("internal", "Failed to commit write batch");
