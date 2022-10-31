@@ -1,3 +1,4 @@
+import dayjs from "dayjs"
 import {
   Expo,
   ExpoPushErrorReceipt,
@@ -25,6 +26,14 @@ export type SendPushNotificationArgument = {
   notificationRecipients?: string[];
   sendToAll?: boolean;
   dryRun?: boolean;
+};
+
+interface FirestoreNotification {
+  body: string;
+  payload?: unknown;
+  sendTime: string;
+  sound?: string;
+  title: string;
 };
 
 /**
@@ -135,6 +144,11 @@ export default runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
       payload: notificationPayload,
     };
 
+    const firestoreNotificationContent: FirestoreNotification = {
+      ...notificationContent,
+      sendTime: dayjs().startOf("minute").toISOString(),
+    };
+
     // Create a new Expo SDK client
     const expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
 
@@ -145,7 +159,7 @@ export default runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
 
     if (sendToAll) {
       const notificationDocument = firestore.collection("past-notifications").doc(notificationId);
-      writeBatch.create(notificationDocument, notificationContent);
+      writeBatch.create(notificationDocument, firestoreNotificationContent);
 
       logger.info("Sending to all users.");
 
@@ -171,7 +185,7 @@ export default runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
     } else if (notificationAudiences && Array.isArray(notificationAudiences)) {
 
       const notificationDocument = firestore.collection("past-notifications").doc(notificationId);
-      writeBatch.create(notificationDocument, notificationContent);
+      writeBatch.create(notificationDocument, firestoreNotificationContent);
       logger.debug("Sending to audiences.");
 
       // Get the user documents for the notification.
@@ -216,7 +230,7 @@ export default runWith({ secrets: ["EXPO_ACCESS_TOKEN"] })
       userDocuments.forEach((userDocument) => {
         const notificationDocument = userDocument.ref.collection("past-notifications").doc(notificationId);
         // Create the user's notification document.
-        writeBatch.create(notificationDocument, notificationContent);
+        writeBatch.create(notificationDocument, firestoreNotificationContent);
         userDocumentsAndReferences.push([userDocument.ref, notificationDocument]);
       });
 
